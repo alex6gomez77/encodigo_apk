@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "encodigo",
+    "slug": "encodigoapk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/app-icon.png",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
+    "scheme": "encodigo",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/logo-portada.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/app-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.alex6gomez77.encodigo",
+      "userInterfaceStyle": "light",
+      "androidStatusBar": {
+        "backgroundColor": "#ffffff",
+        "barStyle": "dark-content"
+      }      
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+    [
+      "expo-sqlite",
+      {
+        "enableFTS": true,
+        "useSQLCipher": true,
+        "android": {
+          "enableFTS": false,
+          "useSQLCipher": false
+        },
+        "ios": {
+          "customBuildFlags": [
+            "-DSQLITE_ENABLE_DBSTAT_VTAB=1 -DSQLITE_ENABLE_SNAPSHOT=1"
+          ]
+        }
+      }
+    ],
+    [
+      "expo-font",
+      {
+        "fonts": ["./assets/fonts/SIMPLIFICA.ttf"]
+      }
+    ],
+    "expo-router",
+    "expo-secure-store"
+  ],
+    "owner": "alex6gomez77",
+    "extra": {
+      "eas": {
+        "projectId": "99ab9ae7-7c3c-48e5-b5c3-ec925418c9f4"
+      }
+    }
+  }
+}

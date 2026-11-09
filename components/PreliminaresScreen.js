@@ -1,0 +1,1270 @@
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  View,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
+  FlatList,
+  Modal,
+  Platform,
+  Image,
+  Pressable,
+} from 'react-native';
+import { AppText as Text, AppTextInput as TextInput, AppPicker as Picker } from './AppText';
+
+import { commonStyles } from '../styles/commonStyles.js';
+import ScreenHeader from './ScreenHeader';
+import { useSQLiteContext } from 'expo-sqlite';
+import { FontAwesome5 } from '@expo/vector-icons';
+import {  useLocalSearchParams,Link, useRouter } from 'expo-router';
+import { obtenerRenglonesFiltrados, contarRenglonesFiltrados, eliminarFiltro, actualizarFiltro, obtenerDetallesDelRenglon, obtenerObras, obtenerObraActiva, establecerObraActiva, obtenerObjetosdeobras, obtenerObjetodeobraActivo, agregarRCalObra, obtenerRenglonesAsignados, eliminarObjetosDeLaObra, eliminarRenglonAsignado } from '../db/database.js';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import PizZip from 'pizzip';
+import { Buffer } from 'buffer';
+
+global.Buffer = global.Buffer || Buffer;
+
+const TABLA_ID = 'RC'; // esta pantalla filtra renglones constructivos
+const LIMITE = 50;
+
+export default function PreliminaresScreen() {
+  
+  const { obraId } = useLocalSearchParams();
+  const db = useSQLiteContext();
+  const idObra = Array.isArray(obraId) ? obraId[0] : obraId;
+  const router = useRouter();
+  const [laObra, setLaObra] = useState({});
+  const [renglones, setRenglones] = useState([]);
+  const [renglonesAsignados, setRenglonesAsignados] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [cargando, setCargando] = useState(false);
+  const [hayMas, setHayMas] = useState(true);
+  const [todos, setTodos] = useState(0);
+  const [filtro, setFiltro] = useState('');
+  const [cadenafiltro, setCadenafiltro] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalDetalleVisible, setModalDetalleVisible] = useState(false);
+  const [modalAgregarAObraVisible, setModalAgregarAObraVisible] = useState(false);
+  const [exportacionVisible, setExportacionVisible] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const [exportacionMensaje, setExportacionMensaje] = useState('');
+  const [exportacionError, setExportacionError] = useState('');
+  const [filtroVisible, setFiltroVisible] = useState(false);
+  const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
+  const [detallesRenglon, setDetallesRenglon] = useState(null);
+  const [obras, setObras] = useState(null);
+  const [obra_id, setObra_id] = useState(null);
+  const [objetosdeobras, setObjetosdeobras] = useState(null);
+  const [objetodeobra_id, setObjetodeobra_id] = useState(null);
+  const [cantidad, setCantidad] = useState('1');
+  const filtroRef = useRef(null);
+  const totalesPorObjeto = useMemo(() => {
+    const totales = new Map();
+    for (const renglon of renglonesAsignados) {
+      const objetoId = String(renglon.objetodeobra_id ?? 'default');
+      const costo = Number(renglon.precio ?? 0) * Number(renglon.cantidad ?? 0);
+      totales.set(objetoId, (totales.get(objetoId) ?? 0) + costo);
+    }
+    return totales;
+  }, [renglonesAsignados]);
+  const costoTotalObra = useMemo(
+    () => [...totalesPorObjeto.values()].reduce((total, costo) => total + costo, 0),
+    [totalesPorObjeto]
+  );
+  const cargarInicial = useCallback(async (estaActiva = () => true) => {
+    try {
+      const primeros = await obtenerRenglonesFiltrados(db, TABLA_ID, LIMITE, 0);
+      const total = await contarRenglonesFiltrados(db, TABLA_ID);
+      const elFiltro = await db.getFirstAsync(
+        'SELECT * FROM filtros WHERE tabla_id = ? ORDER BY id DESC LIMIT 1',
+        TABLA_ID
+      );
+      const obra = idObra
+        ? await db.getFirstAsync('SELECT * FROM obras WHERE id = ?', idObra)
+        : await obtenerObraActiva(db);
+      const asignados = obra?.id != null
+        ? await obtenerRenglonesAsignados(db, obra.id)
+        : [];
+      if (!estaActiva()) return;
+
+      setLaObra(obra ?? {});
+      setTodos(total);
+      setRenglones(primeros);
+      setOffset(primeros.length);
+      setHayMas(primeros.length < total);
+      setCadenafiltro(elFiltro?.filtro ?? '');
+      setFiltroVisible(Boolean(elFiltro?.valor));
+      setRenglonesAsignados(asignados);
+    } catch (error) {
+      if (estaActiva()) {
+        const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+        Alert.alert('Error', `No se pudieron cargar los preliminares. ${detalle || String(error)}`);
+      }
+    }
+  }, [db, idObra]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let estaActiva = true;
+      cargarInicial(() => estaActiva);
+      return () => {
+        estaActiva = false;
+      };
+    }, [cargarInicial])
+  );
+
+  const cargarMas = async () => {
+    if (cargando || !hayMas) return;
+    setCargando(true);
+    try {
+      const nuevos = await obtenerRenglonesFiltrados(db, TABLA_ID, LIMITE, offset);
+      setRenglones(prev => [...prev, ...nuevos]);
+      setOffset(prev => prev + nuevos.length);
+      setHayMas(offset + nuevos.length < todos);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+      Alert.alert('Error', `No se pudieron cargar más renglones. ${detalle || String(error)}`);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const eliminarelFiltro = async () => {
+    await eliminarFiltro(db, TABLA_ID);
+   // setCadenafiltro("");
+    cargarInicial();
+  }
+
+  const handleFiltrar = async () => {
+    await actualizarFiltro(db, TABLA_ID, "*", filtro);
+    setModalVisible(false);
+    cargarInicial();
+
+  }
+
+  function limpiarCampos() {
+    setFiltro('');
+  }
+
+  function abrirModalFiltrado() {
+    limpiarCampos();
+    setModalVisible(true);
+  }
+
+  const ponerActivaLaObrayObjetodeobra = async(obraId, elObjetodeobra) => {
+    setObra_id(obraId);
+    setObjetodeobra_id(elObjetodeobra);
+  }
+
+  const agregarAObra = async () => {
+    const lasObras = await obtenerObras(db);
+    setObras(lasObras);
+    const obra_activa = await obtenerObraActiva(db);
+
+    const objetodeobra_activo = await obtenerObjetodeobraActivo(db);
+
+    const losobjetosdeobras = await obtenerObjetosdeobras(db);
+    setObjetosdeobras(losobjetosdeobras);
+    
+
+
+    await ponerActivaLaObrayObjetodeobra(
+      laObra.id ?? obra_activa?.id ?? lasObras[0]?.id,
+      objetodeobra_activo?.objetodeobra_activo ?? losobjetosdeobras[0]?.id
+    );
+
+
+
+    setModalAgregarAObraVisible(true);
+  }
+
+  const abrirModalDetalles = async (item) => { 
+    setElementoSeleccionado(item); // Guardas el elemento 
+    const losDetalles = await obtenerDetallesDelRenglon(db, item.IDRVariante);
+    setDetallesRenglon(losDetalles);
+    setModalDetalleVisible(true);
+  }
+  
+  const actualizarObraId = async (value) => {
+    await establecerObraActiva(db, value);
+    setObra_id(value);
+    // Carga los objetos de obra de la obra seleccionada.
+  };
+
+  const actualizarObjetodeobraId = async (value) => {
+    await establecerObjetodeobraActivo(db, value);
+    setObjetodeobra_id(value);
+    // Carga los objetos de obra de la obra seleccionada.
+  };
+
+
+  function handleCancelar() {
+    limpiarCampos();
+    setModalVisible(false);
+    setModalDetalleVisible(false);
+    setModalAgregarAObraVisible(false);
+  }
+
+  function handleCancelarAgregandoAObra() {
+    setModalAgregarAObraVisible(false);
+  }
+
+  const handleAgregarRCalObra = async () => {
+    if (obra_id == null || objetodeobra_id == null) {
+      Alert.alert('Validación', 'Seleccione una obra y un objeto de obra antes de continuar.');
+      return;
+    }
+
+    try {
+      await agregarRCalObra(db,obra_id,objetodeobra_id,elementoSeleccionado.IDRVariante,cantidad,elementoSeleccionado.Precio,'');
+      if (String(obra_id) === String(laObra.id)) {
+        setRenglonesAsignados(await obtenerRenglonesAsignados(db, obra_id));
+      }
+      setModalAgregarAObraVisible(false);
+      Alert.alert('Renglón constructivo añadido', `Se añadió con éxito el renglón constructivo ${elementoSeleccionado.IDRVariante} a la obra.`);
+      router.push('/Obras');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo asignar el renglón a la obra.');
+    }
+  }
+
+  const confirmarEliminarObjetoDeObra = (objeto) => {
+    const renglonesDelObjeto = renglonesAsignados.filter(
+      renglon => String(renglon.objetodeobra_id) === String(objeto.objetodeobra_id)
+    ).length;
+
+    Alert.alert(
+      'Eliminar objeto de obra',
+      `Se quitarán ${renglonesDelObjeto} renglón(es) de "${objeto.objetodeobra || 'Por defecto'}" de esta obra. Esta acción no elimina el objeto de obra del catálogo. ¿Deseas continuar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar de la obra',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await eliminarObjetosDeLaObra(
+                db,
+                laObra.id,
+                objeto.objetodeobra_id
+              );
+              setRenglonesAsignados(await obtenerRenglonesAsignados(db, laObra.id));
+            } catch (error) {
+              Alert.alert(
+                'Error',
+                `No se pudo eliminar el objeto de obra de la obra. ${error.message}`
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmarEliminarRenglon = (renglon) => {
+    Alert.alert(
+      'Eliminar renglón constructivo',
+      `¿Deseas quitar el renglón ${renglon.IDRVariante} de esta obra?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await eliminarRenglonAsignado(db, laObra.id, renglon.asignacion_id);
+              setRenglonesAsignados(await obtenerRenglonesAsignados(db, laObra.id));
+            } catch (error) {
+              const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+              Alert.alert(
+                'Error',
+                `No se pudo eliminar el renglón de la obra. ${detalle || String(error)}`
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const exportarListado = async (destino) => {
+    setExportando(true);
+    setExportacionMensaje('');
+    setExportacionError('');
+
+    if (renglonesAsignados.length === 0) {
+      setExportacionError('Agrega renglones a la obra antes de generar el Excel.');
+      setExportando(false);
+      return;
+    }
+
+    try {
+      const datos = [
+        ['LISTADO DE CANTIDADES'],
+        ['Obra', laObra.obra || ''],
+        [],
+        [
+          'Objeto de obra',
+          'Código',
+          'Descripción',
+          'Suministro',
+          'Tipo de suministro',
+          'Cantidad',
+          'Unidad',
+          'Precio unitario',
+          'Costo total',
+          'Observaciones',
+        ],
+        ...renglonesAsignados.map((renglon) => {
+          const cantidad = Number(renglon.cantidad) || 0;
+          const precio = Number(renglon.precio) || 0;
+          return [
+            renglon.objetodeobra || 'Por defecto',
+            renglon.IDRVariante || '',
+            renglon.RVariante || '',
+            renglon.suministro_nombre || '',
+            renglon.suministro_tipo || '',
+            cantidad,
+            renglon.suministro_unidad || renglon.umedicion || '',
+            precio,
+            cantidad * precio,
+            renglon.observaciones || '',
+          ];
+        }),
+        [],
+        ['', '', '', '', '', '', '', 'Costo total de la obra', costoTotalObra],
+      ];
+      const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&apos;',
+        '"': '&quot;',
+      })[caracter]);
+      const filasXml = datos.map((fila, indiceFila) => {
+        const celdasXml = fila.map((valor, indiceColumna) => {
+          const referencia = `${String.fromCharCode(65 + indiceColumna)}${indiceFila + 1}`;
+          if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return `<c r="${referencia}"><v>${valor}</v></c>`;
+          }
+          return `<c r="${referencia}" t="inlineStr"><is><t xml:space="preserve">${escaparXml(valor ?? '')}</t></is></c>`;
+        }).join('');
+        return `<row r="${indiceFila + 1}">${celdasXml}</row>`;
+      }).join('');
+
+      const zip = new PizZip();
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml" ContentType="application/xml"/>'
+        + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        + '</Types>');
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<sheets><sheet name="Listado de cantidades" sheetId="1" r:id="rId1"/></sheets>'
+        + '</workbook>');
+      zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + `<sheetData>${filasXml}</sheetData></worksheet>`);
+      const contenido = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const fecha = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = `Listado_de_cantidades_${fecha}.xlsx`;
+      const tipoArchivo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      if (destino === 'guardar' && Platform.OS === 'android') {
+        const permiso = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permiso.granted) {
+          setExportacionError('No se seleccionó una carpeta para guardar el archivo.');
+          return;
+        }
+
+        const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+          permiso.directoryUri,
+          nombreArchivo,
+          tipoArchivo
+        );
+        await FileSystem.writeAsStringAsync(uri, contenido, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setExportacionMensaje('El archivo Excel se guardó en la carpeta seleccionada.');
+        return;
+      }
+
+      const directorioCache = FileSystem.cacheDirectory;
+      if (!directorioCache) {
+        throw new Error('No está disponible la carpeta temporal para crear el archivo.');
+      }
+      const uri = `${directorioCache}${nombreArchivo}`;
+      await FileSystem.writeAsStringAsync(uri, contenido, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('No hay una aplicación disponible para compartir o guardar el archivo.');
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: tipoArchivo,
+        dialogTitle: destino === 'guardar' ? 'Guardar archivo de Excel' : 'Enviar listado de cantidades',
+        UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      });
+      setExportacionMensaje(
+        destino === 'guardar'
+          ? 'Se abrió el selector para guardar el archivo Excel.'
+          : 'Se abrió el menú para compartir el archivo. Selecciona WhatsApp para enviarlo.'
+      );
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      setExportacionError(`No se pudo generar o compartir el Excel. ${detalle}`);
+    } finally {
+      setExportando(false);
+    }
+  };
+
+  const preguntarDestinoExportacion = () => {
+    setExportacionMensaje('');
+    setExportacionError('');
+    setExportacionVisible(true);
+  };
+
+
+  useEffect(() => {
+    if (modalVisible) {
+      filtroRef.current.focus();
+    }
+  }, [modalVisible]);
+
+  return (
+    <View style={styles.contentContainer}>
+      <ScreenHeader
+        title={'PRELIMINARES' }
+        count={renglonesAsignados.length }
+        onBack={() => router.back()}
+      />
+       
+      <Text style={commonStyles.headerFiltro}>Obra: "{ laObra.obra }"
+      </Text>
+      
+      <View style={styles.listModeContainer}>
+          <View style={styles.assignedListTitle}>
+            <Text style={styles.assignedPrice}>
+              Costo: ${costoTotalObra.toFixed(2)}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Generar Excel del listado de cantidades"
+            onPress={preguntarDestinoExportacion}
+            style={styles.exportButton}
+          >
+            <FontAwesome5 name="file-excel" size={16} color="#ffffff" />
+            <Text style={styles.exportButtonText}>Excel</Text>
+          </Pressable>
+      </View>
+      
+    <FlatList
+      style={{ paddingHorizontal: 5}}
+      data={renglonesAsignados}
+      keyExtractor={(item) => item.asignacion_id.toString()}
+      renderItem={({ item, index }) => (
+        <View>
+          {(index === 0 || renglonesAsignados[index - 1].objetodeobra_id !== item.objetodeobra_id) && (
+            <View style={styles.objetoObraHeader}>
+              <Text style={styles.objetoObraHeading}>
+                {item.objetodeobra || 'Por defecto'}
+              </Text>
+              <Text style={styles.assignedPrice}>
+                $
+                {(totalesPorObjeto.get(String(item.objetodeobra_id ?? 'default')) ?? 0).toFixed(2)}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Eliminar ${item.objetodeobra || 'objeto de obra'} de la obra`}
+                onPress={() => confirmarEliminarObjetoDeObra(item)}
+                style={styles.deleteObjectButton}
+              >
+                <FontAwesome5 name="trash" size={15} color="#c62828" />
+                <Text style={styles.deleteObjectButtonText}>Quitar</Text>
+              </Pressable>
+            </View>
+          )}
+          <View style={commonStyles.detallesItemContainer}>
+            <View style={styles.assignedLineHeader}>
+              <Text style={commonStyles.campoCodigo}>{item.IDRVariante}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Eliminar renglón ${item.IDRVariante} de la obra`}
+                onPress={() => confirmarEliminarRenglon(item)}
+                style={styles.deleteLineButton}
+              >
+                <FontAwesome5 name="trash" size={14} color="#c62828" />
+                <Text style={styles.deleteObjectButtonText}>Quitar</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.assignedDescription}>{item.RVariante || 'Renglón sin descripción'}</Text>
+            {!!item.suministro_nombre && (
+              <Text style={styles.assignedNotes}>
+                {`Suministro: ${item.suministro_nombre} (${item.IDRecurso})`}
+              </Text>
+            )}
+            <View style={{ flex: 1, flexDirection: 'row'}}>
+            <Text style={styles.assignedPrice}>
+                {item.cantidad} x {item.umedicion || ''}
+              </Text>
+            <Text style={styles.assignedPrice}>Precio: ${Number(item.precio ?? 0).toFixed(2)}</Text>
+            <Text style={styles.assignedPrice}>
+              Costo: ${(Number(item.precio ?? 0) * Number(item.cantidad ?? 0)).toFixed(2)}
+            </Text>
+            </View>
+            {!!item.observaciones && <Text style={styles.assignedNotes}>{item.observaciones}</Text>}
+          </View>
+        </View>
+      ) }
+      ListEmptyComponent={
+       (
+          <Text style={styles.emptyAssignedList}>Esta obra aún no tiene renglones asignados.</Text>
+        )
+      }
+      onEndReached={undefined}
+      onEndReachedThreshold={undefined}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews
+    />
+
+     
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelar}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>
+              Filtrado
+            </Text>
+
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingBottom: 16}}>
+              <Text style={styles.label}>Filtro</Text>
+              <TextInput
+                ref={filtroRef}
+                style={commonStyles.input}
+                placeholder="Filtro..."
+                value={filtro}
+                onChangeText={setFiltro}
+              />  
+             
+            </ScrollView>
+             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+                <TouchableOpacity style={commonStyles.buttonAgregar} onPress={handleFiltrar} >
+                  <Text style={commonStyles.buttonTextAgregar}>Filtrar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={commonStyles.buttonCancelar} onPress={handleCancelar} >
+                  <Text style={commonStyles.buttonTextAgregar}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+          </View>
+        </View>
+      </Modal>
+
+
+      <Modal
+        visible={modalDetalleVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelar}
+      >
+        <View style={styles.modalOverlay2}>
+          <View style={styles.modalContainer2}>
+          <View style={commonStyles.gradienteContainer}>
+          <TouchableOpacity  onPress={handleCancelar} >
+            <FontAwesome5 style={{ marginRight: 10}} name="arrow-left" size={20} color="#192f6a" />
+                </TouchableOpacity>
+            
+            <View style={{flexDirection: 'row', alignItems: 'center',}}>
+              <Image          
+                source={require('../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              /> 
+              <View style={{flexDirection: 'column', alignItems: 'flex-start'}}>
+                <View style={{flexDirection: 'row',  justifyContent: 'space-between'}}>
+              <Text style={styles.headerText}>
+                ENCODIGO
+                </Text>
+                <Text style={styles.headerText2}>
+                PRECONS III   
+                </Text>
+              </View>
+                <Text style={styles.headerText}>
+                  DETALLES DEL RENGLÓN CONSTRUCTIVO        
+                </Text>
+              </View>
+            </View>
+            <Text></Text>
+          </View>
+          {elementoSeleccionado ?
+          <View style={styles.detallesItemContainer}>
+            <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0}}>
+              <Text style={commonStyles.campoCodigo}>{elementoSeleccionado.IDRVariante} </Text>
+              <Text 
+                style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1 }]} 
+                numberOfLines={3} 
+                ellipsizeMode="tail"
+              > 
+               {elementoSeleccionado.SobreGrupo}  | {elementoSeleccionado.Grupo}  | {elementoSeleccionado.SubGrupo}
+              </Text>
+            </View>
+              
+              <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold',  }} numberOfLines={2}>{elementoSeleccionado.RVariante}</Text>
+              <Text style={{ fontSize: 16, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', textAlign: 'center'  }}>Precio: ${Number(elementoSeleccionado.Precio ?? 0).toFixed(2)} x {elementoSeleccionado.umedicion}</Text>
+         
+
+
+          <View style={styles.resumenContainer2}>
+
+          <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
+            <View   style={styles.gradienteResumenContainerFichas}>               
+              <Text 
+                style={{textAlign: 'center',  marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Costo de Materiales
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${Number(elementoSeleccionado.CDMateriales ?? 0).toFixed(2)}
+                </Text>                      
+            </View>
+            <View style={styles.gradienteResumenContainerFichas}> 
+              <Text 
+                style={{textAlign: 'center', marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Costo Mano de Obra
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${Number(elementoSeleccionado.CDManoObra ?? 0).toFixed(2)}
+                </Text>
+            </View>
+          </View>
+
+          <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
+            <View   style={styles.gradienteResumenContainerFichas}>               
+              <Text 
+                style={{textAlign: 'center',  marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Costo Uso de Equipos
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${Number(elementoSeleccionado.CDUsoEquipos ?? 0).toFixed(2)}
+                </Text>                      
+            </View>
+            <View style={styles.gradienteResumenContainerFichas}> 
+              <Text 
+                style={{textAlign: 'center', marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Horas Hombre
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${elementoSeleccionado.HorasHombre}
+                </Text>
+            </View>
+          </View>
+
+          <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
+            <View   style={styles.gradienteResumenContainerFichas}>               
+              <Text 
+                style={{textAlign: 'center',  marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Horas Equipo
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${elementoSeleccionado.HorasEquipos}
+                </Text>                      
+            </View>
+            <View style={styles.gradienteResumenContainerFichas}> 
+              <Text 
+                style={{textAlign: 'center', marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Horas Total
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${elementoSeleccionado.HorasTotal}
+                </Text>
+            </View>
+          </View> 
+          </View>
+          </View>          
+          : ''
+          }
+          {detallesRenglon ?
+            <ScrollView >
+              <Text style={{ fontSize: 12, fontFamily: 'FiraSans_400Regular', textAlign: 'left',  paddingHorizontal: 20  }}>
+                ELEMENTOS DE COMPOSICIÓN {detallesRenglon.length}
+              </Text>
+              
+              <FlatList
+                style={{ paddingHorizontal: 5}}
+                data={detallesRenglon}
+                keyExtractor={(item) => item.IDRecurso.toString()}
+                renderItem={({ item }) => (
+                  <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>
+                   
+                   
+                    <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+                      <Text style={commonStyles.campoCodigo2}>{item.IDRecurso} </Text>
+                      <Text style={{ fontSize: 12, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold' }}> {item.tiporecurso} </Text>
+                     </View>
+                     <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular' }}>{item.Recurso}</Text>
+                      <Text 
+                        style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1 }]} 
+                        numberOfLines={3} 
+                        ellipsizeMode="tail"
+                      >  
+                      <View style={{flexDirection: 'column'}}>
+                        
+                        <Text style={{ fontSize: 12, fontFamily: 'FiraSans_400Regular',  }}> {item.Peso ? `Precio: $` + item.Precio + ` | ` : ''} Norma: {item.Norma} x {item.umedicion} {item.Peso ? `| Peso:` + item.Peso + `kg` : ''}</Text>
+                      </View>
+                      </Text>
+                    
+                     
+                     
+                     
+                    
+                  </View>
+                )}
+                
+                windowSize={5}
+                removeClippedSubviews
+              />             
+            </ScrollView>
+            : ''
+            }
+              <Pressable
+                style={commonStyles.buttonFlotante}
+                onPress={() => agregarAObra()}
+              >
+                <FontAwesome5 name="plus" size={18} color="white" />
+              </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+
+      <Modal
+        visible={modalAgregarAObraVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelarAgregandoAObra}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+          <View style={commonStyles.gradienteContainer}>
+          <TouchableOpacity  onPress={handleCancelarAgregandoAObra} >
+            <FontAwesome5 style={{ marginRight: 10}} name="arrow-left" size={20} color="#192f6a" />
+                </TouchableOpacity>
+            
+            <View style={{flexDirection: 'row', alignItems: 'center',}}>
+              <Image          
+                source={require('../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              /> 
+              <View style={{flexDirection: 'row', alignItems: 'center',}}>                
+                <Text style={[styles.headerText, { flex: 1, flexShrink: 1 }]} 
+                  numberOfLines={3} 
+                  ellipsizeMode="tail"
+                  >
+                    AGREGANDO RC AL OBRA
+                </Text>
+              </View>
+            </View>
+            
+          </View>
+          {elementoSeleccionado ?
+          <View style={styles.detallesItemContainer}>
+            <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0}}>
+              <Text style={commonStyles.campoCodigo}>{elementoSeleccionado.IDRVariante} </Text>
+              <Text 
+                style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1, textTransform: 'lowercase' }]} 
+                numberOfLines={3} 
+                ellipsizeMode="tail"
+              > 
+               {elementoSeleccionado.SobreGrupo}  | {elementoSeleccionado.Grupo}  | {elementoSeleccionado.SubGrupo}
+              </Text>
+            </View>
+              
+              <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold' }}  numberOfLines={2}>{elementoSeleccionado.RVariante}</Text>
+              <Text style={{ fontSize: 16, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', textAlign: 'center'  }}>Precio: ${Number(elementoSeleccionado.Precio ?? 0).toFixed(2)} x {elementoSeleccionado.umedicion}</Text>
+                   
+          </View>          
+          : ''
+          }
+
+
+          {obras ?
+          <View style={styles.detallesItemContainer}>
+
+            <Text style={styles.label}>Obra</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={obra_id}
+                onValueChange={value => actualizarObraId(value)}
+              >
+                {obras.map(obra => (
+                  <Picker.Item key={obra.id} label={obra.obra} value={obra.id} />
+                ))}
+              </Picker>          
+            </View>
+
+            <Text style={styles.label}>Objeto de Obra</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={objetodeobra_id}
+                onValueChange={value => actualizarObjetodeobraId(value)}
+              >
+                {objetosdeobras.map(oo => (
+                  <Picker.Item key={oo.id} label={oo.objetodeobra} value={oo.id} />
+                ))}
+              </Picker>          
+            </View>
+
+            <Text style={styles.label}>Cantidad</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              value={cantidad}
+              onChangeText={text => setCantidad(text)}
+            />
+
+            <Text style={styles.label}>Ir a los detalles de la obra</Text>
+           
+            
+
+          <View style={commonStyles.buttonsRow}>
+            <TouchableOpacity style={commonStyles.buttonAgregar} onPress={handleAgregarRCalObra} >
+              <Text style={commonStyles.buttonTextAgregar}> AGREGAR </Text>
+            </TouchableOpacity>               
+          </View>
+            
+          </View>
+           : ''
+          }
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={exportacionVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!exportando) setExportacionVisible(false);
+        }}
+      >
+        <View style={styles.exportModalOverlay}>
+          <View style={styles.exportModalContainer}>
+            <Text style={styles.exportModalTitle}>Exportar listado de cantidades</Text>
+            <Text style={styles.exportModalMessage}>
+              {exportando
+                ? 'Generando el archivo Excel...'
+                : exportacionError || exportacionMensaje || '¿Qué deseas hacer con el archivo Excel?'}
+            </Text>
+            {!exportando && !exportacionError && !exportacionMensaje && (
+              <View style={styles.exportModalActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => exportarListado('guardar')}
+                  style={[styles.exportModalButton, styles.exportSaveButton]}
+                >
+                  <Text style={styles.exportModalButtonText}>Guardar en el teléfono</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => exportarListado('compartir')}
+                  style={[styles.exportModalButton, styles.exportShareButton]}
+                >
+                  <Text style={styles.exportModalButtonText}>Enviar por WhatsApp</Text>
+                </Pressable>
+              </View>
+            )}
+            {!exportando && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setExportacionVisible(false)}
+                style={styles.exportModalCancel}
+              >
+                <Text style={styles.exportModalCancelText}>
+                  {exportacionError || exportacionMensaje ? 'Cerrar' : 'Cancelar'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
+      
+    </View>
+
+
+
+    
+  );
+}
+
+const styles = StyleSheet.create({
+ container: { flex: 1,  backgroundColor: '#fff' },
+  resumenContainer2: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 6,
+  },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    marginTop: 4,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  headerContainer: {
+    padding: 16,
+    backgroundColor: '#4b86b4',
+    marginBottom: 16,
+    borderRadius: 10,
+  }, detallesItemContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    margin: 5,
+},
+  contentContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    marginTop: 10
+  },
+  logo: {
+    width: 50,
+    height: 50,
+    
+  },
+  gradienteResumenContainerFichas: {
+    alignItems: 'center',
+    backgroundColor: '#f2f2f2', 
+    borderRadius: 5,
+    padding: 5,
+    width: '40%',
+    marginBottom: 5,
+    overflow: 'hidden',
+    flexShrink: 1,
+    marginHorizontal: 20
+  },
+  resumenNumero: {
+      fontSize: 16,
+      fontWeight: 'bold',
+  },
+  headerText: {
+    color: '#192f6a',
+    marginLeft: 15,
+    fontWeight: 'bold',
+  },
+  headerText2: {
+    color: '#192f6a',
+    marginLeft: 15,
+  },
+
+
+  itemContainer: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    marginBottom: 12,
+  },
+  botonesCabecera: {
+    flexDirection: 'row',
+    marginTop: 8,
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  botonesContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    justifyContent: 'flex-end',
+    width: '100%',
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4b86b4',
+    borderRadius: 5,
+    padding: 5,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#999',
+    borderRadius: 6,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  modalOverlay: {
+    flex:1,
+    backgroundColor: 'rgba(0,0,0,0.5)', // Semi transparente para modal
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    width: '100%',
+    maxHeight: '85%',
+    padding: 16,
+  },
+  modalOverlay2: {
+    flex:1,
+    backgroundColor: 'rgba(0,0,0,0.5)', // Semi transparente para modal
+    alignItems: 'center',
+  },
+  modalContainer2: {
+    backgroundColor: 'white',
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  pickerContainer: {
+    marginBottom: 8,
+  },
+  pickerLabel: {
+    paddingLeft: 4,
+    color: 'gray'
+
+  },
+  pickerIOS: {
+    height: 150,
+  },
+  pickerAndroid: {
+    height: 50,
+    width: '100%',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#999',
+    borderRadius: 6,
+    marginBottom: 8,
+    // ajusta padding si es necesario para que se vea bien
+    overflow: 'hidden', // importante para que el borde redondeado funcione
+  },
+
+  texto: {
+    fontFamily: 'FiraSans_400Regular',
+    fontSize: 18,
+  },
+  listModeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  assignedListTitle: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#217346',
+    borderRadius: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginLeft: 8,
+  },
+  exportButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  listModeButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 5,
+  },
+  listModeButtonActive: {
+    backgroundColor: '#192f6a',
+  },
+  listModeText: {
+    color: '#192f6a',
+    fontWeight: 'bold',
+  },
+  listModeTextActive: {
+    color: 'white',
+  },
+  objetoObraHeading: {
+    flex: 1,
+    color: '#192f6a',
+    fontSize: 16,
+    fontWeight: 'bold',
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  objetoObraHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 8,
+  },
+  deleteObjectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  deleteObjectButtonText: {
+    color: '#c62828',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  deleteLineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  assignedItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  assignedLineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  assignedQuantity: {
+    color: '#192f6a',
+    fontWeight: 'bold',
+  },
+  assignedDescription: {
+    fontSize: 14,
+    fontFamily: 'FiraSans_400Regular',
+    fontWeight: 'bold',
+    marginTop: 3,
+  },
+  assignedPrice: {
+    fontSize: 16,
+    marginTop: 3,
+    paddingRight: 5
+  },
+  assignedNotes: {
+    fontSize: 12,
+    color: '#555',
+    marginTop: 3,
+  },
+  exportModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 20,
+  },
+  exportModalContainer: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 20,
+  },
+  exportModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#192f6a',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  exportModalMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  exportModalActions: {
+    gap: 10,
+  },
+  exportModalButton: {
+    alignItems: 'center',
+    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  exportSaveButton: {
+    backgroundColor: '#217346',
+  },
+  exportShareButton: {
+    backgroundColor: '#192f6a',
+  },
+  exportModalButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  exportModalCancel: {
+    alignItems: 'center',
+    marginTop: 14,
+    paddingVertical: 8,
+  },
+  exportModalCancelText: {
+    color: '#555555',
+    fontWeight: '600',
+  },
+  emptyAssignedList: {
+    textAlign: 'center',
+    color: '#666',
+    padding: 20,
+  },
+});
