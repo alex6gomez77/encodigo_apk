@@ -1506,31 +1506,6 @@ export default function ObrasScreen() {
               </View> 
             </View> 
 
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={`Agregar objetos de obra a la obra ${obra.obra}`}
-              onPress={() => router.push({
-                pathname: '/Preliminares',
-                params: { obraId: String(obra.id) },
-              })}
-              style={styles.addObjectButton}
-            >
-              <FontAwesome5 name="plus" size={14} color="#fff" />
-              <Text style={styles.addObjectButtonText}>Agregar objetos de obra</Text>
-            </TouchableOpacity>
-
-            {!obra.obra_activa && (
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel={`Activar obra ${obra.obra}`}
-                onPress={() => activarObra(obra)}
-                style={styles.activateWorkButton}
-              >
-                <FontAwesome5 name="check-circle" size={15} color="#192f6a" />
-                <Text style={styles.activateWorkButtonText}>Activar obra</Text>
-              </TouchableOpacity>
-            )}
-
            
 
             <View style={styles.botonesListadoObras}>
@@ -1582,13 +1557,25 @@ export default function ObrasScreen() {
                 </TouchableOpacity> 
             </View>
            
-            {obra.obra_activa ?
-            <View style={commonStyles.etiquetaObraActiva} >
-              <Text style={{ fontSize: 14, color: '#fff' }}>
-                  OBRA ACTIVO 
-              </Text>
-            </View>
-            : ''}
+            {obra.obra_activa ? (
+              <View style={commonStyles.etiquetaObraActiva}>
+                <FontAwesome5 name="check-circle" size={15} color="#eeff04" />
+                
+                <Text style={{ fontSize: 14, color: '#eeff04' }}>
+                  OBRA ACTIVA
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Activar obra ${obra.obra}`}
+                onPress={() => activarObra(obra)}
+                style={commonStyles.etiquetaObraInactiva}
+              >
+                <FontAwesome5 name="check-circle" size={15} color="#192f6a" />
+                <Text style={styles.activateWorkButtonText}>Activar</Text>
+              </TouchableOpacity>
+            )}
             
           </View>
         ))}
@@ -1953,21 +1940,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     paddingRight: 35,
-  },
-  addObjectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#4c669f',
-    borderRadius: 6,
-    paddingVertical: 9,
-    marginTop: 8,
-  },
-  addObjectButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   activateWorkButton: {
     flexDirection: 'row',

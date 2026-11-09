@@ -1,5 +1,6 @@
 import { Slot } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; // Cambia import
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
 import { LicenciaProvider } from '../contexts/LicenciaContext';
 import { Platform, Pressable, Text, View, StyleSheet } from 'react-native';
@@ -137,7 +138,9 @@ export default function Layout() {
           >
             <StatusBar translucent backgroundColor="transparent" />
             <SuministroSelectionProvider>
-              <Slot />
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <Slot />
+              </GestureHandlerRootView>
             </SuministroSelectionProvider>
           </View>
         </LicenciaProvider>

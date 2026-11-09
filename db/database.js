@@ -659,7 +659,10 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
             recursos.Recurso AS suministro_nombre,
             recursotipos.tiporecurso AS suministro_tipo,
             suministro_unidades.umedicion AS suministro_unidad,
-            recursos.Precio AS suministro_precio
+            recursos.Precio AS suministro_precio,
+            sobregrupos.SobreGrupo,
+            grupos.Grupo,
+            subgrupos.SubGrupo
      FROM listadodecantidades
      LEFT JOIN objetosdeobras ON objetosdeobras.id = listadodecantidades.objetodeobra_id
      LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
@@ -667,6 +670,9 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
      LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
      LEFT JOIN recursotipos ON recursotipos.idtiporecurso = recursos.Tipo
      LEFT JOIN unidadesmedidas AS suministro_unidades ON suministro_unidades.um = recursos.UM
+     LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
+     LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
+     LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
      WHERE listadodecantidades.obra_id = ?
      ORDER BY objetosdeobras.objetodeobra COLLATE NOCASE ASC,
               listadodecantidades.objetodeobra_id ASC,

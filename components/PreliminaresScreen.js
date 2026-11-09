@@ -13,6 +13,7 @@ import {
   Image,
   Pressable,
 } from 'react-native';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { AppText as Text, AppTextInput as TextInput, AppPicker as Picker } from './AppText';
 
 import { commonStyles } from '../styles/commonStyles.js';
@@ -481,55 +482,70 @@ export default function PreliminaresScreen() {
       renderItem={({ item, index }) => (
         <View>
           {(index === 0 || renglonesAsignados[index - 1].objetodeobra_id !== item.objetodeobra_id) && (
-            <View style={styles.objetoObraHeader}>
-              <Text style={styles.objetoObraHeading}>
-                {item.objetodeobra || 'Por defecto'}
-              </Text>
-              <Text style={styles.assignedPrice}>
-                $
-                {(totalesPorObjeto.get(String(item.objetodeobra_id ?? 'default')) ?? 0).toFixed(2)}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Eliminar ${item.objetodeobra || 'objeto de obra'} de la obra`}
-                onPress={() => confirmarEliminarObjetoDeObra(item)}
-                style={styles.deleteObjectButton}
-              >
-                <FontAwesome5 name="trash" size={15} color="#c62828" />
-                <Text style={styles.deleteObjectButtonText}>Quitar</Text>
-              </Pressable>
-            </View>
+            <Swipeable
+              renderRightActions={() => (
+                <RectButton
+                  accessibilityRole="button"
+                  accessibilityLabel={`Eliminar ${item.objetodeobra || 'objeto de obra'} de la obra`}
+                  onPress={() => confirmarEliminarObjetoDeObra(item)}
+                  style={styles.swipeDeleteAction}
+                >
+                  <FontAwesome5 name="trash" size={18} color="#fff" />
+                </RectButton>
+              )}
+            >
+              <View style={styles.objetoObraHeader}>
+                <Text style={styles.objetoObraHeading}>
+                  {item.objetodeobra || 'Por defecto'}
+                </Text>
+                <Text style={styles.assignedPrice}>
+                  $
+                  {(totalesPorObjeto.get(String(item.objetodeobra_id ?? 'default')) ?? 0).toFixed(2)}
+                </Text>
+              </View>
+            </Swipeable>
           )}
-          <View style={commonStyles.detallesItemContainer}>
-            <View style={styles.assignedLineHeader}>
-              <Text style={commonStyles.campoCodigo}>{item.IDRVariante}</Text>
-              <Pressable
+          <Swipeable
+            renderRightActions={() => (
+              <RectButton
                 accessibilityRole="button"
                 accessibilityLabel={`Eliminar renglón ${item.IDRVariante} de la obra`}
                 onPress={() => confirmarEliminarRenglon(item)}
-                style={styles.deleteLineButton}
+                style={styles.swipeDeleteAction}
               >
-                <FontAwesome5 name="trash" size={14} color="#c62828" />
-                <Text style={styles.deleteObjectButtonText}>Quitar</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.assignedDescription}>{item.RVariante || 'Renglón sin descripción'}</Text>
-            {!!item.suministro_nombre && (
-              <Text style={styles.assignedNotes}>
-                {`Suministro: ${item.suministro_nombre} (${item.IDRecurso})`}
-              </Text>
+                <FontAwesome5 name="trash" size={18} color="#fff" />
+              </RectButton>
             )}
-            <View style={{ flex: 1, flexDirection: 'row'}}>
-            <Text style={styles.assignedPrice}>
-                {item.cantidad} x {item.umedicion || ''}
+          >
+            <View style={commonStyles.detallesItemContainer}>
+              <View style={styles.assignedLineHeader}>
+                <Text style={commonStyles.campoCodigo}>{item.IDRVariante}</Text>
+                <Text
+                  style={styles.assignedHierarchy}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {[item.SobreGrupo, item.Grupo, item.SubGrupo].filter(Boolean).join(' | ') || 'Sin jerarquía'}
+                </Text>
+              </View>
+              <Text style={styles.assignedDescription}>{item.RVariante || 'Renglón sin descripción'}</Text>
+              {!!item.suministro_nombre && (
+                <Text style={styles.assignedNotes}>
+                  {`Suministro: ${item.suministro_nombre} (${item.IDRecurso})`}
+                </Text>
+              )}
+              <View style={{ flex: 1, flexDirection: 'row'}}>
+              <Text style={styles.assignedPrice}>
+                  {item.cantidad} x {item.umedicion || ''}
+                </Text>
+              <Text style={styles.assignedPrice}>Precio: ${Number(item.precio ?? 0).toFixed(2)}</Text>
+              <Text style={styles.assignedPrice}>
+                Costo: ${(Number(item.precio ?? 0) * Number(item.cantidad ?? 0)).toFixed(2)}
               </Text>
-            <Text style={styles.assignedPrice}>Precio: ${Number(item.precio ?? 0).toFixed(2)}</Text>
-            <Text style={styles.assignedPrice}>
-              Costo: ${(Number(item.precio ?? 0) * Number(item.cantidad ?? 0)).toFixed(2)}
-            </Text>
+              </View>
+              {!!item.observaciones && <Text style={styles.assignedNotes}>{item.observaciones}</Text>}
             </View>
-            {!!item.observaciones && <Text style={styles.assignedNotes}>{item.observaciones}</Text>}
-          </View>
+          </Swipeable>
         </View>
       ) }
       ListEmptyComponent={
@@ -1159,6 +1175,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingRight: 8,
   },
+  swipeDeleteAction: {
+    backgroundColor: '#c62828',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 72,
+    marginVertical: 4,
+    borderRadius: 6,
+  },
   deleteObjectButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1185,8 +1209,15 @@ const styles = StyleSheet.create({
   },
   assignedLineHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  assignedHierarchy: {
+    flex: 1,
+    flexShrink: 1,
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 18,
   },
   assignedQuantity: {
     color: '#192f6a',
