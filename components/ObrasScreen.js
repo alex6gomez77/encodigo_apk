@@ -4,6 +4,7 @@ import {
   View, ScrollView, StyleSheet,
   Modal, Alert, TouchableOpacity, Pressable
 } from 'react-native';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { AppText as Text, AppTextInput as TextInput, AppButton as Button } from './AppText';
 
 import { Picker  } from '@react-native-picker/picker';
@@ -1479,8 +1480,20 @@ export default function ObrasScreen() {
           </Text>
         )}
         {obrasFiltradas.map(obra => (
-           
-          <View key={obra.id} style={commonStyles.detallesItemContainer}>            
+          <Swipeable
+            key={obra.id}
+            renderRightActions={() => (
+              <RectButton
+                accessibilityRole="button"
+                accessibilityLabel={`Eliminar obra ${obra.obra}`}
+                onPress={() => handleEliminarObra(obra.id)}
+                style={styles.swipeDeleteAction}
+              >
+                <FontAwesome5 name="trash" size={18} color="#fff" />
+              </RectButton>
+            )}
+          >
+            <View style={commonStyles.detallesItemContainer}>            
             <Text style={{ fontSize: 10, paddingTop: 4}}>
                {obra.codigo || "S/C"} 
             </Text>
@@ -1552,9 +1565,6 @@ export default function ObrasScreen() {
                 <FontAwesome5 name="file-word" size={20} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
               </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => { handleEliminarObra(obra.id); }} style={{width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20,}} >
-                  <FontAwesome5 name="trash" size={15} color="red" />
-                </TouchableOpacity> 
             </View>
            
             {obra.obra_activa ? (
@@ -1577,7 +1587,8 @@ export default function ObrasScreen() {
               </TouchableOpacity>
             )}
             
-          </View>
+            </View>
+          </Swipeable>
         ))}
       </ScrollView>
 
