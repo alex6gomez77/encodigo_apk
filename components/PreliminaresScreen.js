@@ -305,10 +305,7 @@ export default function PreliminaresScreen() {
     }
 
     try {
-      const datos = [
-        ['LISTADO DE CANTIDADES'],
-        ['Obra', laObra.obra || ''],
-        [],
+      const datos = [       
         [
           'Etapa',
           'Código',
@@ -453,11 +450,7 @@ export default function PreliminaresScreen() {
       const objeto = objetosdeobras?.find((o) => String(o.id) === String(objetodeobra_id));
       const nombreObjeto = objeto?.objetodeobra || 'Objeto de obra';
 
-      const datos = [
-        ['LISTADO DE CANTIDADES'],
-        ['Obra', laObra.obra || ''],
-        ['Objeto de obra', nombreObjeto],
-        [],
+      const datos = [       
         [
           'Etapa',
           'Código',
@@ -484,8 +477,6 @@ export default function PreliminaresScreen() {
             cantidad * precio,
           ];
         }),
-        [],
-        ['TOTAL', '', '', '', '', '', '', '', renglonesDelObjeto.reduce((sum, r) => sum + (Number(r.cantidad) || 0) * (Number(r.precio) || 0), 0).toFixed(2)],
       ];
       const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
         '<': '&lt;',

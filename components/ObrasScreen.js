@@ -934,11 +934,6 @@ export default function ObrasScreen() {
       }
 
       const datos = [
-        ['LISTADO DE CANTIDADES'],
-        ['Obra', obra.obra || ''],
-        ['Código', obra.codigo || ''],
-        ['Cliente', obra.cliente || ''],
-        [],
         [
           'Objeto de obra',
           'Etapa',
@@ -974,8 +969,7 @@ export default function ObrasScreen() {
         ]);
       }
 
-      datos.push([]);
-      datos.push(['TOTAL', '', '', '', '', '', '', '', '', totalObra.toFixed(2)]);
+      
 
       const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
         '<': '&lt;',
@@ -1599,7 +1593,7 @@ export default function ObrasScreen() {
             )}
           >
             <View style={commonStyles.detallesItemContainer}>            
-            <Text style={{ fontSize: 12, paddingTop: 4}}>
+            <Text style={{ fontSize: 12, paddingTop: 16, color: '#666' }} >
                {obra.codigo || ""} 
             </Text>
             <Link href={{ pathname: '/Preliminares', params: { obraId: String(obra.id) } }} asChild >
