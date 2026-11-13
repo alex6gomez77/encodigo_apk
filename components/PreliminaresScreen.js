@@ -321,7 +321,7 @@ export default function PreliminaresScreen() {
           const cantidad = Number(renglon.cantidad) || 0;
           const precio = Number(renglon.precio) || 0;
           return [
-            renglon.IDSUbEtapa || '',
+            renglon.IDSubEtapa || '',
             renglon.IDRVariante || '',
             renglon.suministro_nombre || '',
             renglon.RVariante || '',
@@ -466,7 +466,7 @@ export default function PreliminaresScreen() {
           const cantidad = Number(renglon.cantidad) || 0;
           const precio = Number(renglon.precio) || 0;
           return [
-            renglon.IDSUbEtapa || '',
+            renglon.IDSubEtapa || '',
             renglon.IDRVariante || '',
             renglon.suministro_nombre || '',
             renglon.RVariante || '',

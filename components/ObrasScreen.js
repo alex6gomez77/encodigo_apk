@@ -957,7 +957,7 @@ export default function ObrasScreen() {
         totalObra += importe;
         datos.push([
           renglon.objetodeobra || '',
-          renglon.IDSUbEtapa || '',
+          renglon.IDSubEtapa || '',
           renglon.IDRVariante || '',
           renglon.suministro_nombre || '',
           renglon.RVariante || '',
