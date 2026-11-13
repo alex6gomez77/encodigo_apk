@@ -1,1647 +1,1767 @@
-
-// Contenido completo del archivo components/DetallesFichaScreen.js con los cambios realizados
-import { View, FlatList, StyleSheet, Pressable, Modal, TouchableOpacity, Alert, ScrollView,
-  Platform } from "react-native";
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  View,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
+  FlatList,
+  Modal,
+  Platform,
+  Image,
+  Pressable,
+} from 'react-native';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { AppText as Text, AppTextInput as TextInput, AppPicker as Picker } from './AppText';
-import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
-import { useLocalSearchParams, Link } from "expo-router";
-import { createIconSetFromFontello, FontAwesome5 } from "@expo/vector-icons";
-import { useSQLiteContext } from "expo-sqlite";
-import { commonStyles } from "../styles/commonStyles";
-import { useState, useEffect } from "react";
-import { useLicencia, LICENCIA_ESTADOS } from '../contexts/LicenciaContext.js';
-import NumericInput from '../components/NumericInput.js';
 
-const Tab = createMaterialTopTabNavigator();
+import { commonStyles } from '../styles/commonStyles.js';
+import ScreenHeader from './ScreenHeader';
+import { useSQLiteContext } from 'expo-sqlite';
+import { FontAwesome5 } from '@expo/vector-icons';
+import {  useLocalSearchParams,Link, useRouter } from 'expo-router';
+import { obtenerRenglonesFiltrados, contarRenglonesFiltrados, eliminarFiltro, actualizarFiltro, obtenerDetallesDelRenglon, obtenerObras, obtenerObraActiva, establecerObraActiva, obtenerObjetosdeobras, obtenerObjetodeobraActivo, agregarRCalObra, obtenerRenglonesAsignados, eliminarObjetosDeLaObra, eliminarRenglonAsignado } from '../db/database.js';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
+import PizZip from 'pizzip';
+import { Buffer } from 'buffer';
 
-function MyTabBar({ state, descriptors, navigation }) {
-  const icons = {
-    Actividades: 'tasks',
-    Equipos: 'desktop',
-    Recursos: 'boxes',
-    Partidas: 'list',
-  };
+global.Buffer = global.Buffer || Buffer;
 
-  return (
-    <View style={styles.tabBar}>
-      {state.routes.map((route, index) => {
-        const focused = state.index === index;
-        const iconName = icons[route.name] || 'circle';
+const TABLA_ID = 'RC'; // esta pantalla filtra renglones constructivos
+const LIMITE = 50;
 
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-          });
-          if (!focused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-          }
-        };
-
-        return (
-          <TouchableOpacity key={route.key} onPress={onPress} style={styles.tab}>
-            <FontAwesome5 name={iconName} size={20} color={focused ? 'white' : '#bbb'} />
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
-const ActividadesScreen = ({ actividades, listaActividades, cargos, agregarActividad, eliminarActividad, isPremiumDisabled }) => {
+export default function PreliminaresScreen() {
+  
+  const { obraId } = useLocalSearchParams();
+  const db = useSQLiteContext();
+  const idObra = Array.isArray(obraId) ? obraId[0] : obraId;
+  const router = useRouter();
+  const [laObra, setLaObra] = useState({});
+  const [renglones, setRenglones] = useState([]);
+  const [renglonesAsignados, setRenglonesAsignados] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [cargando, setCargando] = useState(false);
+  const [hayMas, setHayMas] = useState(true);
+  const [todos, setTodos] = useState(0);
+  const [filtro, setFiltro] = useState('');
+  const [cadenafiltro, setCadenafiltro] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const initialNuevaFicharhumano = {
-    actividad_id: "",
-    cargo_id: "",
-    cantidad: "1",
-    tiempo: "8",
-    argumentacion: ""
-  };
-  const [nuevaFicharhumano, setNuevaFicharhumano] = useState(initialNuevaFicharhumano);
-
-  const onAgregar = () => {
-    agregarActividad(nuevaFicharhumano);
-    setNuevaFicharhumano(initialNuevaFicharhumano);
-    setModalVisible(false);
-  };
-
-  return (
-    <View style={{ flex: 1, marginTop: 1}}>
-      <View style={commonStyles.resumenContainer}>        
-        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
-          <Text>Actividades {actividades.length}</Text>
-          <Text style={{  fontWeight: 'bold' }}>
-            ${actividades.reduce((acc, a) => acc + Number(a.costo || 0), 0).toFixed(2)}
-          </Text>
-        </View>
-      </View>
-      
-      <FlatList        
-        data={actividades}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={commonStyles.detallesItemContainer}>
-            <Text style={{ fontWeight: 'bold', paddingTop: 5 }}>{`${item.actividad}`}</Text>
-            <Text style={{paddingTop: 5}}>{`${item.cargo.toUpperCase()}`}</Text>
-            <Text>{`${item.cantidad} x ${item.tiempo} hrs`}</Text>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, marginBottom: 2 }}>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Tarifa Horaria</Text>
-                <Text> $ {Number(item.tarifahoraria ?? 0).toFixed(2)}</Text>
-              </View>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Pagado</Text>
-                <Text>
-                  {item.salariodevengado !== undefined && item.salariodevengado !== null && item.salariodevengado !== ''
-                    ? '$ ' + Number(item.salariodevengado).toFixed(2)
-                    : '$ 0.00'}
-                </Text>
-              </View>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Vacaciones</Text>
-                <Text>
-                  {item.vacaciones !== undefined && item.vacaciones !== null && item.vacaciones !== ''
-                    ?  '$ ' + Number(item.vacaciones).toFixed(2)
-                    : '$ 0.00'}
-                </Text>
-              </View>
-            </View>
-            {item.descripcion ?
-            <Text style={{ paddingBottom: 5 }}>{`${item.descripcion}`}</Text> : null}
-
-            <View style={commonStyles.etiquetaPrecio} >
-              <Text >
-                $ {Number(item.costo || 0).toFixed(2)}
-              </Text>
-            </View>
-
-            <View style={commonStyles.eliminarItemDetalles}>
-             <Pressable onPress={() => eliminarActividad(item.id)}>
-              <FontAwesome5 name="trash" size={16} color="red" />
-            </Pressable>
-            </View>
-          </View>
-        )}
-      />
-     
-      <Pressable
-        style={[
-                  commonStyles.buttonFlotante,
-                  isPremiumDisabled()  && { opacity: 0.3 }
-                ]}
-                disabled={isPremiumDisabled()}
-        onPress={() => setModalVisible(true)}
-      >
-        <FontAwesome5 name="plus" size={20} color="white" />
-      </Pressable>
-
-      <Modal transparent visible={modalVisible} animationType="slide">
-        <View style={commonStyles.modalOverlay}>
-          <View style={commonStyles.modalContainer}>
-            <Text style={commonStyles.modalTitle}>Agregar actividad</Text>
-
-            <View style={commonStyles.pickerContainer}>
-              <Text style={commonStyles.pickerLabel}>Actividad</Text>
-              <Picker
-                selectedValue={nuevaFicharhumano.actividad_id}
-                onValueChange={(itemValue) => setNuevaFicharhumano({ ...nuevaFicharhumano, actividad_id: itemValue })}
-                style={Platform.OS === 'ios' ? commonStyles.pickerIOS : commonStyles.pickerAndroid}
-              >
-                <Picker.Item label="Seleccionar actividad" value="" />
-                {listaActividades.map((actividad) => (
-                  <Picker.Item key={actividad.id} label={actividad.actividad} value={actividad.id} />
-                ))}
-              </Picker>
-            </View>
-
-            <View style={commonStyles.pickerContainer}>
-              <Text style={commonStyles.pickerLabel}>Cargo</Text>
-              <Picker
-                selectedValue={nuevaFicharhumano.cargo_id}
-                onValueChange={(itemValue) => setNuevaFicharhumano({ ...nuevaFicharhumano, cargo_id: itemValue })}                
-                style={Platform.OS === 'ios' ? commonStyles.pickerIOS : commonStyles.pickerAndroid}
-              >
-                <Picker.Item label="Seleccionar cargo" value="" />
-                {cargos.map((cargo) => (
-                  <Picker.Item key={cargo.id} label={cargo.cargo} value={cargo.id} />
-                ))}
-              </Picker>
-            </View>
-            <View style={{ flexDirection: 'row', marginBottom: 10, gap: 5 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={commonStyles.pickerLabel}>Cantidad</Text>
-              <TextInput
-                placeholder="Cantidad"
-                value={nuevaFicharhumano.cantidad}
-                onChangeText={(text) => setNuevaFicharhumano({ ...nuevaFicharhumano, cantidad: text })}
-                style={commonStyles.input}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={commonStyles.pickerLabel}>Tiempo (Horas)</Text>
-              <TextInput
-                placeholder="Horas"
-                value={nuevaFicharhumano.tiempo}
-                onChangeText={(text) => setNuevaFicharhumano({ ...nuevaFicharhumano, tiempo: text })}
-                style={commonStyles.input}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-            <Text style={commonStyles.pickerLabel}>Argumentación</Text>
-            <TextInput
-                placeholder="Argumentación"
-                value={nuevaFicharhumano.argumentacion}
-                onChangeText={(text) => setNuevaFicharhumano({ ...nuevaFicharhumano, argumentacion: text })}
-                style={commonStyles.input}
-              />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-              
-                <TouchableOpacity style={commonStyles.buttonAgregar} onPress={onAgregar} >
-                  <Text style={commonStyles.buttonTextAgregar}>AGREGAR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={commonStyles.buttonCancelar} onPress={() => setModalVisible(false)} >
-                  <Text style={commonStyles.buttonTextAgregar}>CANCELAR</Text>
-                </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-};
-
-const EquiposScreen = ({ equipos, listaEquipos, agregarEquipo, eliminarEquipo, insumosxequipos, isPremiumDisabled }) => {
-  const [modalVisible, setModalVisible] = useState(false);
-  const initialNuevoEquipo = {
-    equipo_id: "",
-    cantidad: "1",
-    cantidadhe: "8",
-    argumentacion: ""
-  };
-  const [nuevoEquipo, setNuevoEquipo] = useState(initialNuevoEquipo);
-  const [unidadMedida, setUnidadMedida] = useState('U');
-  const onAgregar = () => {
-    agregarEquipo(nuevoEquipo);
-    setNuevoEquipo(initialNuevoEquipo);
-    setModalVisible(false);
-  };
-
-  const insumosPorEquipo = (equipoId) => {
-    return insumosxequipos.filter((insumo) => insumo.equipo_id === equipoId);
-  };
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={commonStyles.resumenContainer}>
-        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
-          <Text>Equipos {equipos.length}</Text>
-          <Text style={{  fontWeight: 'bold' }}>
-            ${equipos.reduce((acc, a) => acc + Number(a.costo || 0), 0).toFixed(2)}
-          </Text>
-        </View>
-      </View>
-      <FlatList
-        data={equipos}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={commonStyles.detallesItemContainer}>
-            <Text style={{paddingTop: 5, marginBottom: 5}}>{item.umedida_id == 'HE' ? "Cantidad: " + item.cantidad + " Equipos" : "Uso: " + item.cantidad + " " + item.umedida_id}</Text>
-            <Text style={{ fontWeight: 'bold' }}>{item.equipo}</Text>
-            
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, marginBottom: 2 }}>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Explotación</Text>
-                <Text>  {Number(item.cantidadhe ?? 0).toFixed(2)} Hrs</Text>
-              </View>
-               <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Depreciación</Text>
-                <Text> $ {Number(item.depreciacion ?? 0).toFixed(2)}</Text>
-              </View>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Mantenimiento</Text>
-                <Text>
-                  {item.mantenimiento !== undefined && item.mantenimiento !== null && item.mantenimiento !== ''
-                    ? '$ ' + Number(item.mantenimiento).toFixed(2)
-                    : '$ 0.00'}
-                </Text>
-              </View>              
-            </View>
-           {item.descripcion ?
-            <Text>{`${item.descripcion}`}</Text> : null}
-            {insumosPorEquipo(item.equipo_id).length > 0 && (
-              <View style={{paddingHorizontal: 8, borderRadius: 6, marginTop: 6, paddingBottom: 8, backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#eee' }}>
-                <Text style={{ fontWeight: 'bold', marginTop: 6, color: 'gray' }}>Insumos</Text>
-                {insumosPorEquipo(item.equipo_id).map((insumo) => (
-                  <View  key={insumo.id} style={{flexDirection: 'row',  justifyContent: 'space-between'}}>
-                    <Text style={{fontSize: 12}}>{insumo.insumo}</Text>
-                    <Text style={{fontSize: 12}}>{insumo.indiceconsumo.toFixed(2)} {insumo.umconsumo}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            <View style={commonStyles.etiquetaPrecio}>
-              <Text>
-                $ {Number(item.costo || 0).toFixed(2)}
-              </Text>
-            </View>
-             <View style={commonStyles.eliminarItemDetalles}>
-             <Pressable onPress={() => eliminarEquipo(item.id)}>
-              <FontAwesome5 name="trash" size={16} color="red" />
-            </Pressable>
-            </View>
-
-          </View>
-        )}
-      />
-      <Pressable
-       style={[
-                  commonStyles.buttonFlotante,
-                  isPremiumDisabled()  && { opacity: 0.3 }
-                ]}
-                disabled={isPremiumDisabled()}
-        onPress={() => setModalVisible(true)}
-      >
-        <FontAwesome5 name="plus" size={20} color="white" />
-      </Pressable>
-
-      <Modal transparent visible={modalVisible} animationType="slide">
-        <View style={commonStyles.modalOverlay}>
-          <View style={commonStyles.modalContainer}>
-            <Text style={commonStyles.modalTitle}>Agregar equipo</Text>
-
-            <View style={commonStyles.pickerContainer}>
-              <Text style={commonStyles.pickerLabel}>Equipo</Text>
-              <Picker
-                selectedValue={nuevoEquipo.equipo_id}
-                onValueChange={(itemValue) => {                 
-                  setNuevoEquipo({ ...nuevoEquipo, equipo_id: itemValue });
-                  // Encuentra el equipo y determina la unidad de medida
-                  const equipoSeleccionado = listaEquipos.find(e => e.id === itemValue);
-                  if (equipoSeleccionado) {
-                    if (equipoSeleccionado.umexplotacion === "HE") {
-                      setUnidadMedida("U");
-                    } else {
-                      setUnidadMedida(equipoSeleccionado.umdescripcion || "U");
-                    }
-                  }
-                }}                
-                style={Platform.OS === 'ios' ? commonStyles.pickerIOS : commonStyles.pickerAndroid}
-              >
-                <Picker.Item label="Seleccionar equipo" value="" />
-                {listaEquipos.map((equipo) => (
-                  <Picker.Item key={equipo.id} label={equipo.equipo} value={equipo.id} />
-                ))}
-              </Picker>
-            </View>
-
-            <Text style={commonStyles.pickerLabel}>Cantidad  ({unidadMedida})</Text>
-            <TextInput
-              placeholder="Cantidad"
-              value={nuevoEquipo.cantidad}
-              onChangeText={(text) => setNuevoEquipo({ ...nuevoEquipo, cantidad: text })}
-              style={commonStyles.input}
-              keyboardType="numeric"
-            />
-
-            <Text style={commonStyles.pickerLabel}>Horas de Explotación</Text>
-            <TextInput
-              placeholder="Horas"
-              value={nuevoEquipo.cantidadhe}
-              onChangeText={(text) => setNuevoEquipo({ ...nuevoEquipo, cantidadhe: text })}
-              style={commonStyles.input}
-              keyboardType="numeric"
-            />
-
-            <Text style={commonStyles.pickerLabel}>Argumentación</Text>
-            <TextInput
-              placeholder="Argumentación"
-              value={nuevoEquipo.argumentacion}
-              onChangeText={(text) => setNuevoEquipo({ ...nuevoEquipo, argumentacion: text })}
-              style={commonStyles.input}
-            />
-
-             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-              <TouchableOpacity style={commonStyles.buttonAgregar} onPress={onAgregar} >
-                  <Text style={commonStyles.buttonTextAgregar}>AGREGAR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={commonStyles.buttonCancelar} onPress={() => setModalVisible(false)} >
-                  <Text style={commonStyles.buttonTextAgregar}>CANCELAR</Text>
-                </TouchableOpacity>
-            </View>
-
-           
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-};
-
-const RecursosScreen = ({ recursos, listaRecursos, agregarRecurso, eliminarRecurso, isPremiumDisabled }) => {
-  const [modalVisible, setModalVisible] = useState(false);
-  const initialNuevoRecurso = {
-    insumo_id: "",
-    cantidad: "1",
-    precio: "",
-    descripcion: "",
-    unidad_medida: ''
-  };
-  const [nuevoRecurso, setNuevoRecurso] = useState(initialNuevoRecurso);
-
-  const onAgregar = () => {
-    agregarRecurso(nuevoRecurso);
-    setNuevoRecurso(initialNuevoRecurso);
-    setModalVisible(false);
-  };
-
-  // Manejador del Picker modificado
-  const handleRecursoChange = (itemValue) => {
-    // Buscar el recurso seleccionado
-    
-    const recursoSeleccionado = listaRecursos.find(recurso => recurso.id === itemValue);
-    if (recursoSeleccionado) {
-      setNuevoRecurso({
-        ...nuevoRecurso,
-        insumo_id: itemValue,
-        precio: recursoSeleccionado.preciounitario?.toString() || '', // Auto-completar precio
-        unidad_medida: recursoSeleccionado.um || '' // Guardar UM
-      });
-    } else {
-      // Si se selecciona "Seleccionar recurso"
-      setNuevoRecurso({
-        ...nuevoRecurso,
-        insumo_id: '',
-        precio: '',
-        unidad_medida: ''
-      });
+  const [modalDetalleVisible, setModalDetalleVisible] = useState(false);
+  const [modalAgregarAObraVisible, setModalAgregarAObraVisible] = useState(false);
+  const [exportacionVisible, setExportacionVisible] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const [exportacionMensaje, setExportacionMensaje] = useState('');
+  const [exportacionError, setExportacionError] = useState('');
+  const [objetoExportando, setObjetoExportando] = useState(null);
+  const [importando, setImportando] = useState(false);
+  const [importacionMensaje, setImportacionMensaje] = useState('');
+  const [importacionError, setImportacionError] = useState('');
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [objetoImportando, setObjetoImportando] = useState(null);
+  const [filtroVisible, setFiltroVisible] = useState(false);
+  const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
+  const [detallesRenglon, setDetallesRenglon] = useState(null);
+  const [obras, setObras] = useState(null);
+  const [obra_id, setObra_id] = useState(null);
+  const [objetosdeobras, setObjetosdeobras] = useState(null);
+  const [objetodeobra_id, setObjetodeobra_id] = useState(null);
+  const [cantidad, setCantidad] = useState('1');
+  const filtroRef = useRef(null);
+  const totalesPorObjeto = useMemo(() => {
+    const totales = new Map();
+    for (const renglon of renglonesAsignados) {
+      const objetoId = String(renglon.objetodeobra_id ?? 'default');
+      const costo = Number(renglon.precio ?? 0) * Number(renglon.cantidad ?? 0);
+      totales.set(objetoId, (totales.get(objetoId) ?? 0) + costo);
     }
-  };
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={commonStyles.resumenContainer}>
-        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
-          <Text>Recursos {recursos.length}</Text>
-          <Text style={{  fontWeight: 'bold' }}>
-            ${recursos.reduce((acc, a) => acc + Number(a.costo || 0), 0).toFixed(2)}
-          </Text>
-        </View>
-      </View>
-      <FlatList
-        data={recursos}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={[commonStyles.detallesItemContainer, {paddingBottom: 8}]}>
-            <Text style={{ fontWeight: 'bold', paddingTop: 5 }}>{item.insumo.toUpperCase()}</Text>           
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, marginBottom: 2, paddingTop: 5 }}>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Cantidad</Text>
-                <Text>  {Number(item.cantidad ?? 0).toFixed(2)} {item.um}</Text>
-              </View>
-               <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: '#666' }}>Precio</Text>
-                <Text> $ {Number(item.precio ?? 0).toFixed(2)} / {item.um}</Text>
-              </View>                          
-            </View>
-            {item.descripcion ?
-            <Text>{`${item.descripcion}`}</Text> : null}
-
-            <View style={commonStyles.etiquetaPrecio}>
-              <Text>
-                $ {Number(item.costo || 0).toFixed(2)}
-              </Text>
-            </View>
-            {!item.hook_id ?
-             <View style={commonStyles.eliminarItemDetallesRecursos}>
-             <Pressable onPress={() => eliminarRecurso(item.id)}>
-              <FontAwesome5 name="trash" size={16} color="red" />
-            </Pressable>
-            </View>
-            : 
-            <View style={commonStyles.eliminarItemDetallesRecursos}>
-             <Pressable onPress={() => Alert.alert('Precausión','Este Recurso solo se elimina quitando el Equipo que lo generó')}>
-              <FontAwesome5 name="exclamation" size={16} color="#4c669f" />
-            </Pressable>
-            </View>
-            }
-          </View>
-        )}
-      />
-      <Pressable
-        style={[
-                  commonStyles.buttonFlotante,
-                  isPremiumDisabled()  && { opacity: 0.3 }
-                ]}
-                disabled={isPremiumDisabled()}
-        onPress={() => setModalVisible(true)}
-      >
-        <FontAwesome5 name="plus" size={20} color="white" />
-      </Pressable>
-
-      <Modal transparent visible={modalVisible} animationType="slide">
-        <View style={commonStyles.modalOverlay}>
-          <View style={commonStyles.modalContainer}>
-            <Text style={commonStyles.modalTitle}>Agregar recurso</Text>
-
-            <View style={commonStyles.pickerContainer}>
-              <Text style={commonStyles.pickerLabel}>Recurso</Text>
-              <Picker
-                selectedValue={nuevoRecurso.insumo_id}
-                onValueChange={handleRecursoChange}                
-                style={Platform.OS === 'ios' ? commonStyles.pickerIOS : commonStyles.pickerAndroid}
-              >
-                <Picker.Item label="Seleccionar recurso" value="" />
-                {listaRecursos.map((recurso) => (
-                  <Picker.Item key={recurso.id} label={recurso.insumo} value={recurso.id} />
-                ))}
-              </Picker>
-            </View>
-
-             {/* Contenedor flex para cantidad y UM */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={commonStyles.pickerLabel}>Cantidad
-                    ({nuevoRecurso.unidad_medida ? (
-                  <Text style={{ marginLeft: 10, marginTop: 20, fontSize: 16, color: '#666' }}>
-                    {nuevoRecurso.unidad_medida}
-                  </Text>
-                ) : 'U'})
-                  </Text>
-                  <TextInput
-                    placeholder="Cantidad"
-                    value={nuevoRecurso.cantidad}
-                    onChangeText={(text) => setNuevoRecurso({ ...nuevoRecurso, cantidad: text })}
-                    style={commonStyles.input}
-                    keyboardType="numeric"
-                  />
-                </View>
-                {/* Mostrar UM si hay un recurso seleccionado */}
-                
-              </View>
-
-            <Text style={commonStyles.pickerLabel}>Precio</Text>
-            <TextInput
-              placeholder="Precio"
-              value={nuevoRecurso.precio}
-              onChangeText={(text) => setNuevoRecurso({ ...nuevoRecurso, precio: text })}
-              style={commonStyles.input}
-              keyboardType="numeric"
-            />
-
-            <Text style={commonStyles.pickerLabel}>Argumentación</Text>
-            <TextInput
-              placeholder="Argumentación"
-              value={nuevoRecurso.argumentacion}
-              onChangeText={(text) => setNuevoRecurso({ ...nuevoRecurso, descripcion: text })}
-              style={commonStyles.input}
-            />
-
-             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-              <TouchableOpacity style={commonStyles.buttonAgregar} onPress={onAgregar} >
-                  <Text style={commonStyles.buttonTextAgregar}>AGREGAR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={commonStyles.buttonCancelar} onPress={() => setModalVisible(false)} >
-                  <Text style={commonStyles.buttonTextAgregar}>CANCELAR</Text>
-                </TouchableOpacity>
-            </View>
-
-           
-          </View>
-        </View>
-      </Modal>
-    </View>
+    return totales;
+  }, [renglonesAsignados]);
+  const costoTotalObra = useMemo(
+    () => [...totalesPorObjeto.values()].reduce((total, costo) => total + costo, 0),
+    [totalesPorObjeto]
   );
-};
-
-
-const PartidasScreen = ({ partidas, fichasubpartidas, handleGuardarPartida, conceptos, setConceptos, isPremiumDisabled }) => {
-   const [modalVisible, setModalVisible] = useState(false);
-   const [titulopartida, setTitulopartida] = useState('Partida X');
-   const [modalConceptos, setModalConceptos] = useState([]);
-   const [draft, setDraft] = useState([]);
-
-     /* helper para actualizar cualquier campo */
-    const update = (id, field, value) =>
-      setDraft(prev =>
-        prev.map(item =>
-          item.id === id ? { ...item, [field]: value } : item
-        )
-      );
-
-    useEffect(() => {
-      if (modalConceptos.length > 0) {
-        setDraft(modalConceptos.map(c => ({ ...c })));
-        setModalVisible(true);
-      }
-    }, [modalConceptos]);
-
-  const handlePress = async (id, fila) => {
+  const cargarInicial = useCallback(async (estaActiva = () => true) => {
     try {
-      const filtrado = fichasubpartidas.filter(sp => sp.partida_id === id);
-      const titulo = partidas.filter(sp => sp.fila === fila)[0].concepto;
-      setTitulopartida(titulo);
-      setModalConceptos(filtrado);
+      const primeros = await obtenerRenglonesFiltrados(db, TABLA_ID, LIMITE, 0);
+      const total = await contarRenglonesFiltrados(db, TABLA_ID);
+      const elFiltro = await db.getFirstAsync(
+        'SELECT * FROM filtros WHERE tabla_id = ? ORDER BY id DESC LIMIT 1',
+        TABLA_ID
+      );
+      const obra = idObra
+        ? await db.getFirstAsync('SELECT * FROM obras WHERE id = ?', idObra)
+        : await obtenerObraActiva(db);
+      const asignados = obra?.id != null
+        ? await obtenerRenglonesAsignados(db, obra.id)
+        : [];
+      if (!estaActiva()) return;
+
+      setLaObra(obra ?? {});
+      setTodos(total);
+      setRenglones(primeros);
+      setOffset(primeros.length);
+      setHayMas(primeros.length < total);
+      setCadenafiltro(elFiltro?.filtro ?? '');
+      setFiltroVisible(Boolean(elFiltro?.valor));
+      setRenglonesAsignados(asignados);
     } catch (error) {
+      if (estaActiva()) {
+        const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+        Alert.alert('Error', `No se pudieron cargar los preliminares. ${detalle || String(error)}`);
+      }
     }
-  };
+  }, [db, idObra]);
 
-  const handleSave = async () => {
-    setConceptos(draft.map(c => ({ ...c })));
-    handleGuardarPartida(draft);
-    setModalVisible(false);
-    setModalConceptos([]);
-  };
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={commonStyles.resumenContainer}>
-        <View style={{ alignItems: 'center', flexDirection: 'row' }}>
-          <Text>Partidas {partidas.length}</Text>          
-        </View>
-      </View>
-      <FlatList
-        data={partidas}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-           <View style={[commonStyles.detallesItemPartidas, {minHeight: 60}]}>
-            <Text style={{ color: 'gray', paddingTop: 5}}>Fila {item.fila}</Text>
-            <Text style={{ fontWeight: '700', paddingRight: 45, paddingTop: 8}}>{item.concepto}</Text>           
-            {item.desglosarpartida === 1 && (
-              <View style={commonStyles.fondoFlotantePartida}>
-              <Pressable style={commonStyles.buttonFlotantePartida} onPress={() => handlePress(item.plantilla_id, item.fila)}>
-                <FontAwesome5 name="list" size={10} color="white" />
-              </Pressable>
-              </View>
-            )}
-            <View style={commonStyles.etiquetaPrecio} >
-              {item.importe ? <Text>  {'$ ' + item.importe.toFixed(2)}  </Text> : <Text style={{ color: 'gray'}}> $ 0.00 </Text> }
-            </View>
-          </View>
-        )}
-      />
-     
-      
-      {/* Modal de las subpartidas */}
-      <Modal transparent visible={modalVisible} animationType="slide">
-      <View style={commonStyles.modalOverlay}>
-        <View style={[commonStyles.modalContainer, {backgroundColor: '#f2f2f2'}]}>
-          <Text style={commonStyles.modalTitle}>{titulopartida}</Text>
-
-          {/* Scroll solo del cuerpo */}
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {draft.map((concepto) => (
-              
-              <View key={concepto.id} style={{ marginBottom: 5, backgroundColor: 'white', padding: 5, borderRadius: 8 }}>
-                <Text style={{ marginBottom: 4 }}>{concepto.concepto}</Text>
-                {/* Fila Costo + Salario */}
-                
-                <View style={{ flexDirection: 'row', gap: 8}}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={commonStyles.pickerLabel}>Costo</Text>
-                    <NumericInput
-                      placeholder="Costo"
-                      value={concepto.importe}
-                      onValueChange={txt => update(concepto.id, 'importe', txt)}
-                      style={commonStyles.input}
-                      editable={concepto.editable === 1}
-                      decimals={2}
-                    />
-                  </View>
-                  
-                  <View style={{ flex: 1 }}>
-                    <Text style={commonStyles.pickerLabel}>Salario</Text>
-                    <NumericInput
-                      placeholder="Salario"
-                      value={concepto.salarios}
-                      onValueChange={txt => update(concepto.id, 'salarios', txt)}
-                      style={commonStyles.input}
-                      editable={concepto.editable === 1}
-                      decimals={2}
-                    />
-                  </View>
-                </View> 
-                <Text style={commonStyles.pickerLabel}>Argumentación</Text>
-                <TextInput
-                  placeholder="Argumentación"
-                  value={String(concepto.argumentacion ?? '')}
-                  onChangeText={txt => update(concepto.id, 'argumentacion', txt)}
-                  style={commonStyles.input}
-                  multiline
-                />
-              </View>
-            ))}
-          </ScrollView>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-              
-
-              <TouchableOpacity style={[isPremiumDisabled()  && { opacity: 0.3 }, commonStyles.buttonAgregar ]} disabled={isPremiumDisabled()} onPress={handleSave} >
-                <Text style={commonStyles.buttonTextAgregar}>GUARDAR</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={commonStyles.buttonCancelar} onPress={() => { setModalVisible(false); setModalConceptos([]); }} >
-                <Text style={commonStyles.buttonTextAgregar}>CANCELAR</Text>
-              </TouchableOpacity>
-            </View>
-        </View>
-      </View>
-    </Modal>
-    </View>
+  useFocusEffect(
+    useCallback(() => {
+      let estaActiva = true;
+      cargarInicial(() => estaActiva);
+      return () => {
+        estaActiva = false;
+      };
+    }, [cargarInicial])
   );
-}
 
-export default function DetallesFichaScreen() {
-   const { lalicencia, licenciaEstado } = useLicencia();
-   const { ficha } = useLocalSearchParams();
-   const fichaObj = JSON.parse(ficha || "{}");
-   const db = useSQLiteContext();
-   const [showLicenseAlert, setShowLicenseAlert] = useState(false);
-   
-   // Función para determinar si la licencia está vencida (deshabilita todas las operaciones)
-  const isLicenseExpired = () => {
-    return licenciaEstado === LICENCIA_ESTADOS.TRIAL_VENCIDA ||
-           licenciaEstado === LICENCIA_ESTADOS.ORIGINAL_VENCIDA;
-  };
-
-  // Función para determinar si las características premium están deshabilitadas
-  const isPremiumDisabled = () => {
-    switch (licenciaEstado) {
-      case LICENCIA_ESTADOS.SIN_LICENCIA:
-      case LICENCIA_ESTADOS.TRIAL_VENCIDA:
-      case LICENCIA_ESTADOS.ORIGINAL_VENCIDA:
-      case LICENCIA_ESTADOS.ERROR:
-        return true;
-      case LICENCIA_ESTADOS.TRIAL_ACTIVA:
-      case LICENCIA_ESTADOS.ORIGINAL_ACTIVA:
-        return false;
-      default:
-        return true;
+  const cargarMas = async () => {
+    if (cargando || !hayMas) return;
+    setCargando(true);
+    try {
+      const nuevos = await obtenerRenglonesFiltrados(db, TABLA_ID, LIMITE, offset);
+      setRenglones(prev => [...prev, ...nuevos]);
+      setOffset(prev => prev + nuevos.length);
+      setHayMas(offset + nuevos.length < todos);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+      Alert.alert('Error', `No se pudieron cargar más renglones. ${detalle || String(error)}`);
+    } finally {
+      setCargando(false);
     }
   };
 
-  // Función para obtener el mensaje de alerta según el estado
-  const getLicenseAlertMessage = () => {
-    switch (licenciaEstado) {
-      case LICENCIA_ESTADOS.SIN_LICENCIA:
-        return 'Las opciones de añadir Actividades, Equipos, Recursos y modificar las Partidas requieren una licencia válida. Adquiera una licencia para desbloquear estas funciones.';
-      
-      case LICENCIA_ESTADOS.TRIAL_VENCIDA:
-        return 'Su licencia de prueba ha expirado. Las operaciones de añadir Actividades, Equipos, Recursos y modificar las Partidas han sido deshabilitadas hasta que adquiera una licencia válida.';
-      
-      case LICENCIA_ESTADOS.ORIGINAL_VENCIDA:
-        return 'Su licencia original ha expirado. Las operaciones de añadir Actividades, Equipos, Recursos y modificar las Partidas han sido deshabilitadas hasta que renueve su licencia.';
-      
-      case LICENCIA_ESTADOS.ERROR:
-        return 'Error en la verificación de licencia. Las opciones de añadir Actividades, Equipos, Recursos y modificar las Partidas están temporalmente deshabilitadas. Contacte al soporte técnico.';
-      
-      case LICENCIA_ESTADOS.TRIAL_ACTIVA:
-        return 'Está utilizando una licencia de prueba. Las opciones de duplicar ficha e importar ficha no están disponibles durante este período, adquiera una licencia válida para habilitarlas.';
-      
-      case LICENCIA_ESTADOS.ORIGINAL_ACTIVA:
-        return 'Licencia activa. Todas las funciones están disponibles.';
-      
-      default:
-        return 'Las opciones de duplicar ficha e importar ficha han sido deshabilitadas hasta que adquiera una licencia válida.';
+  const eliminarelFiltro = async () => {
+    await eliminarFiltro(db, TABLA_ID);
+   // setCadenafiltro("");
+    cargarInicial();
+  }
+
+  const handleFiltrar = async () => {
+    await actualizarFiltro(db, TABLA_ID, "*", filtro);
+    setModalVisible(false);
+    cargarInicial();
+
+  }
+
+  function limpiarCampos() {
+    setFiltro('');
+  }
+
+  function abrirModalFiltrado() {
+    limpiarCampos();
+    setModalVisible(true);
+  }
+
+  const ponerActivaLaObrayObjetodeobra = async(obraId, elObjetodeobra) => {
+    setObra_id(obraId);
+    setObjetodeobra_id(elObjetodeobra);
+  }
+
+  const agregarAObra = async () => {
+    const lasObras = await obtenerObras(db);
+    setObras(lasObras);
+    const obra_activa = await obtenerObraActiva(db);
+
+    const objetodeobra_activo = await obtenerObjetodeobraActivo(db);
+
+    const losobjetosdeobras = await obtenerObjetosdeobras(db);
+    setObjetosdeobras(losobjetosdeobras);
+    
+
+
+    await ponerActivaLaObrayObjetodeobra(
+      laObra.id ?? obra_activa?.id ?? lasObras[0]?.id,
+      objetodeobra_activo?.objetodeobra_activo ?? losobjetosdeobras[0]?.id
+    );
+
+
+
+    setModalAgregarAObraVisible(true);
+  }
+
+  const abrirModalDetalles = async (item) => { 
+    setElementoSeleccionado(item); // Guardas el elemento 
+    const losDetalles = await obtenerDetallesDelRenglon(db, item.IDRVariante);
+    setDetallesRenglon(losDetalles);
+    setModalDetalleVisible(true);
+  }
+  
+  const actualizarObraId = async (value) => {
+    await establecerObraActiva(db, value);
+    setObra_id(value);
+    // Carga los objetos de obra de la obra seleccionada.
+  };
+
+  const actualizarObjetodeobraId = async (value) => {
+    await establecerObjetodeobraActivo(db, value);
+    setObjetodeobra_id(value);
+    // Carga los objetos de obra de la obra seleccionada.
+  };
+
+
+  function handleCancelar() {
+    limpiarCampos();
+    setModalVisible(false);
+    setModalDetalleVisible(false);
+    setModalAgregarAObraVisible(false);
+  }
+
+  function handleCancelarAgregandoAObra() {
+    setModalAgregarAObraVisible(false);
+  }
+
+  const handleAgregarRCalObra = async () => {
+    if (obra_id == null || objetodeobra_id == null) {
+      Alert.alert('Validación', 'Seleccione una obra y un objeto de obra antes de continuar.');
+      return;
+    }
+
+    try {
+      await agregarRCalObra(db,obra_id,objetodeobra_id,elementoSeleccionado.IDRVariante,cantidad,elementoSeleccionado.Precio,'');
+      if (String(obra_id) === String(laObra.id)) {
+        setRenglonesAsignados(await obtenerRenglonesAsignados(db, obra_id));
+      }
+      setModalAgregarAObraVisible(false);
+      Alert.alert('Renglón constructivo añadido', `Se añadió con éxito el renglón constructivo ${elementoSeleccionado.IDRVariante} a la obra.`);
+      router.push('/Obras');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo asignar el renglón a la obra.');
+    }
+  }
+
+  const confirmarEliminarObjetoDeObra = (objeto) => {
+    const renglonesDelObjeto = renglonesAsignados.filter(
+      renglon => String(renglon.objetodeobra_id) === String(objeto.objetodeobra_id)
+    ).length;
+
+    Alert.alert(
+      'Eliminar objeto de obra',
+      `Se quitarán ${renglonesDelObjeto} renglón(es) de "${objeto.objetodeobra || 'Por defecto'}" de esta obra. Esta acción no elimina el objeto de obra del catálogo. ¿Deseas continuar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar de la obra',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await eliminarObjetosDeLaObra(
+                db,
+                laObra.id,
+                objeto.objetodeobra_id
+              );
+              setRenglonesAsignados(await obtenerRenglonesAsignados(db, laObra.id));
+            } catch (error) {
+              Alert.alert(
+                'Error',
+                `No se pudo eliminar el objeto de obra de la obra. ${error.message}`
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmarEliminarRenglon = (renglon) => {
+    Alert.alert(
+      'Eliminar renglón constructivo',
+      `¿Deseas quitar el renglón ${renglon.IDRVariante} de esta obra?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await eliminarRenglonAsignado(db, laObra.id, renglon.asignacion_id);
+              setRenglonesAsignados(await obtenerRenglonesAsignados(db, laObra.id));
+            } catch (error) {
+              const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+              Alert.alert(
+                'Error',
+                `No se pudo eliminar el renglón de la obra. ${detalle || String(error)}`
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const exportarListado = async (destino) => {
+    setExportando(true);
+    setExportacionMensaje('');
+    setExportacionError('');
+
+    if (renglonesAsignados.length === 0) {
+      setExportacionError('Agrega renglones a la obra antes de generar el Excel.');
+      setExportando(false);
+      return;
+    }
+
+    try {
+      const datos = [       
+        [
+          'Etapa',
+          'Código',
+          'Suministro',
+          'Descripción',
+          'Cantidad',
+          'Unidad Medida',
+          'Precio',
+          'CM',
+          'Importe Total',
+        ],
+        ...renglonesAsignados.map((renglon) => {
+          const cantidad = Number(renglon.cantidad) || 0;
+          const precio = Number(renglon.precio) || 0;
+          return [
+            renglon.IDSubEtapa || '',
+            renglon.IDRVariante || '',
+            renglon.suministro_nombre || '',
+            renglon.RVariante || '',
+            cantidad,
+            renglon.suministro_unidad || renglon.umedicion || '',
+            precio,
+            '1',
+            cantidad * precio,
+          ];
+        }),
+        [],
+      ];
+      const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&apos;',
+        '"': '&quot;',
+      })[caracter]);
+      const filasXml = datos.map((fila, indiceFila) => {
+        const celdasXml = fila.map((valor, indiceColumna) => {
+          const referencia = `${String.fromCharCode(65 + indiceColumna)}${indiceFila + 1}`;
+          if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return `<c r="${referencia}"><v>${valor}</v></c>`;
+          }
+          return `<c r="${referencia}" t="inlineStr"><is><t xml:space="preserve">${escaparXml(valor ?? '')}</t></is></c>`;
+        }).join('');
+        return `<row r="${indiceFila + 1}">${celdasXml}</row>`;
+      }).join('');
+
+      const zip = new PizZip();
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml" ContentType="application/xml"/>'
+        + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        + '</Types>');
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<sheets><sheet name="Listado de cantidades" sheetId="1" r:id="rId1"/></sheets>'
+        + '</workbook>');
+      zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + `<sheetData>${filasXml}</sheetData></worksheet>`);
+      const contenido = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const fecha = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = `Listado_de_cantidades_${fecha}.xlsx`;
+      const tipoArchivo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      if (destino === 'guardar' && Platform.OS === 'android') {
+        const permiso = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permiso.granted) {
+          setExportacionError('No se seleccionó una carpeta para guardar el archivo.');
+          return;
+        }
+
+        const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+          permiso.directoryUri,
+          nombreArchivo,
+          tipoArchivo
+        );
+        await FileSystem.writeAsStringAsync(uri, contenido, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setExportacionMensaje('El archivo Excel se guardó en la carpeta seleccionada.');
+        return;
+      }
+
+      const directorioCache = FileSystem.cacheDirectory;
+      if (!directorioCache) {
+        throw new Error('No está disponible la carpeta temporal para crear el archivo.');
+      }
+      const uri = `${directorioCache}${nombreArchivo}`;
+      await FileSystem.writeAsStringAsync(uri, contenido, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('No hay una aplicación disponible para compartir o guardar el archivo.');
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: tipoArchivo,
+        dialogTitle: destino === 'guardar' ? 'Guardar archivo de Excel' : 'Enviar listado de cantidades',
+        UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      });
+      setExportacionMensaje(
+        destino === 'guardar'
+          ? 'Se abrió el selector para guardar el archivo Excel.'
+          : 'Se abrió el menú para compartir el archivo. Selecciona WhatsApp para enviarlo.'
+      );
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      setExportacionError(`No se pudo generar o compartir el Excel. ${detalle}`);
+    } finally {
+      setExportando(false);
     }
   };
 
-  // Función para obtener el título de la alerta según el estado
-  const getLicenseAlertTitle = () => {
-    switch (licenciaEstado) {
-      case LICENCIA_ESTADOS.SIN_LICENCIA:
-        return 'Licencia Requerida';
-      
-      case LICENCIA_ESTADOS.TRIAL_VENCIDA:
-        return 'Licencia de Prueba Expirada';
-      
-      case LICENCIA_ESTADOS.ORIGINAL_VENCIDA:
-        return 'Licencia Original Expirada';
-      
-      case LICENCIA_ESTADOS.ERROR:
-        return 'Error de Licencia';
-      
-      case LICENCIA_ESTADOS.TRIAL_ACTIVA:
-        return 'Licencia de Prueba Activa';
-      
-      case LICENCIA_ESTADOS.ORIGINAL_ACTIVA:
-        return 'Licencia Activa';
-      
-      default:
-        return 'Licencia no activa';
+  const exportarObjetoDeObra = async (objetodeobra_id) => {
+    setObjetoExportando(objetodeobra_id);
+    setExportando(true);
+    setExportacionMensaje('');
+    setExportacionError('');
+
+    const renglonesDelObjeto = renglonesAsignados.filter(
+      (renglon) => String(renglon.objetodeobra_id ?? 'default') === String(objetodeobra_id ?? 'default')
+    );
+
+    if (renglonesDelObjeto.length === 0) {
+      setExportacionError('No hay renglones asignados a este objeto de obra.');
+      setExportando(false);
+      setObjetoExportando(null);
+      return;
+    }
+
+    try {
+      const objeto = objetosdeobras?.find((o) => String(o.id) === String(objetodeobra_id));
+      const nombreObjeto = objeto?.objetodeobra || 'Objeto de obra';
+      const nombreLimpio = String(nombreObjeto).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 25);
+      const nombreSheet = `LC-${nombreLimpio}`.slice(0, 31);
+
+      const datos = [       
+        [
+          'Etapa',
+          'Código',
+          'Suministro',
+          'Descripción',
+          'Cantidad',
+          'Unidad Medida',
+          'Precio',
+          'CM',
+          'Importe Total',
+        ],
+        ...renglonesDelObjeto.map((renglon) => {
+          const cantidad = Number(renglon.cantidad) || 0;
+          const precio = Number(renglon.precio) || 0;
+          return [
+            renglon.IDSubEtapa || '',
+            renglon.IDRVariante || '',
+            renglon.suministro_nombre || '',
+            renglon.RVariante || '',
+            cantidad,
+            renglon.suministro_unidad || renglon.umedicion || '',
+            precio,
+            '1',
+            cantidad * precio,
+          ];
+        }),
+      ];
+      const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&apos;',
+        '"': '&quot;',
+      })[caracter]);
+      const filasXml = datos.map((fila, indiceFila) => {
+        const celdasXml = fila.map((valor, indiceColumna) => {
+          const referencia = `${String.fromCharCode(65 + indiceColumna)}${indiceFila + 1}`;
+          if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return `<c r="${referencia}"><v>${valor}</v></c>`;
+          }
+          return `<c r="${referencia}" t="inlineStr"><is><t xml:space="preserve">${escaparXml(valor ?? '')}</t></is></c>`;
+        }).join('');
+        return `<row r="${indiceFila + 1}">${celdasXml}</row>`;
+      }).join('');
+
+      const zip = new PizZip();
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml" ContentType="application/xml"/>'
+        + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        + '</Types>');
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<sheets><sheet name="' + nombreSheet + '" sheetId="1" r:id="rId1"/></sheets>'
+        + '</workbook>');
+      zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + `<sheetData>${filasXml}</sheetData></worksheet>`);
+      const contenido = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const fecha = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = `LC-${nombreLimpio}_${fecha}.xlsx`;
+      const tipoArchivo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      const directorioCache = FileSystem.cacheDirectory;
+      if (!directorioCache) {
+        throw new Error('No está disponible la carpeta temporal para crear el archivo.');
+      }
+      const uri = `${directorioCache}${nombreArchivo}`;
+      await FileSystem.writeAsStringAsync(uri, contenido, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('No hay una aplicación disponible para compartir o guardar el archivo.');
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: tipoArchivo,
+        dialogTitle: `Exportar cantidades de ${nombreObjeto}`,
+        UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      });
+      setExportacionMensaje(`Se abrió el menú para compartir el Excel de ${nombreObjeto}.`);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      setExportacionError(`No se pudo generar el Excel. ${detalle}`);
+    } finally {
+      setExportando(false);
+      setObjetoExportando(null);
     }
   };
 
- 
+  const importarCantidadesObjeto = async (objetodeobra_id) => {
+    setObjetoImportando(objetodeobra_id);
+    setImportando(true);
+    setImportacionMensaje('');
+    setImportacionError('');
 
-  const [actividades, setActividades] = useState([]);
-  const [equipos, setEquipos] = useState([]);
-  const [insumosxequipos, setInsumosxequipos] = useState([]);
-  const [recursos, setRecursos] = useState([]);
-  const [partidas, setPartidas] = useState([]);
-  const [fichasubpartidas, setFichasubpartidas] = useState([]);
-  const [listaActividades, setListaActividades] = useState([]);
-  const [cargos, setCargos] = useState([]);
-  const [listaEquipos, setListaEquipos] = useState([]);
-  const [listaRecursos, setListaRecursos] = useState([]);
-  const [precioObra, setPrecioObra] = useState(0);  
-  const [conceptos, setConceptos] = useState([]);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', '*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (res.canceled || !res.assets || res.assets.length === 0) {
+        setImportando(false);
+        setObjetoImportando(null);
+        return;
+      }
+
+      const uri = res.assets[0].uri;
+      let contenidoBase64;
+      try {
+        contenidoBase64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+      } catch (readError) {
+        throw new Error('No se pudo leer el archivo Excel seleccionado.');
+      }
+
+      const zip = new PizZip(contenidoBase64);
+
+      // Leer nombres de hojas del workbook.xml
+      const workbookXml = zip.file('xl/workbook.xml')?.asText() || '';
+      const sheetMatches = workbookXml.match(/<sheet[^>]*name="([^"]*)"[^>]*>/g) || [];
+      const sheetNames = sheetMatches.map(m => {
+        const match = m.match(/name="([^"]*)"/);
+        return match ? match[1] : '';
+      });
+
+      // Determinar nombre del objeto de obra desde la primera hoja
+      let nombreDesdeHoja = sheetNames[0] || '';
+      let nombreObjetoFinal = 'default';
+      let objetodeobraIdFinal = objetodeobra_id;
+
+      if (nombreDesdeHoja.startsWith('LC-')) {
+        const nombreCandidato = nombreDesdeHoja.slice(3);
+        // Buscar objeto de obra existente con ese nombre
+        const objetoExistente = objetosdeobras?.find((o) => String(o.objetodeobra) === String(nombreCandidato));
+        if (objetoExistente) {
+          nombreObjetoFinal = nombreCandidato;
+          objetodeobraIdFinal = objetoExistente.id;
+        } else {
+          nombreObjetoFinal = nombreCandidato;
+          objetodeobraIdFinal = null; // default
+        }
+      } else {
+        nombreObjetoFinal = 'default';
+        objetodeobraIdFinal = null;
+      }
+
+      // Leer datos de la primera hoja de trabajo
+      const sheetXml = zip.file('xl/worksheets/sheet1.xml')?.asText() || '';
+      const filas = sheetXml.match(/<row[^>]*>.*?<\/row>/gs) || [];
+
+      const datosRenglones = [];
+      let enCabecera = false;
+
+      for (const filaXml of filas) {
+        const celdas = filaXml.match(/<c[^>]*>([\s\S]*?)<\/c>/g) || [];
+        const valoresFila = [];
+
+        for (const celdaXml of celdas) {
+          let valor = '';
+          const inlineMatch = celdaXml.match(/<is><t[^>]*>([\s\S]*?)<\/t><\/is>/);
+          if (inlineMatch) {
+            valor = inlineMatch[1];
+          } else {
+            const vMatch = celdaXml.match(/<v>([\s\S]*?)<\/v>/);
+            if (vMatch) valor = vMatch[1];
+          }
+          valoresFila.push(valor);
+        }
+
+        // Detectar fila de cabecera por la palabra "Descripción" o "Código"
+        const filaTexto = valoresFila.join(' | ');
+        if (filaTexto.includes('Descripción') || filaTexto.includes('Código')) {
+          enCabecera = true;
+          continue;
+        }
+
+        if (!enCabecera) continue;
+        if (valoresFila.length === 0 || valoresFila.every(v => v.trim() === '')) continue;
+
+        // Mapear columnas: [Etapa, Código, Suministro, Descripción, Cantidad, Unidad Medida, Precio, CM, Importe Total]
+        const codigoRC = (valoresFila[1] || '').trim();
+        const descripcion = (valoresFila[3] || '').trim();
+        const cantidadRaw = (valoresFila[4] || '').trim();
+        const precioRaw = (valoresFila[6] || '').trim();
+
+        if (!codigoRC && !descripcion) continue;
+
+        const cantidadNum = Number(cantidadRaw) || 0;
+        const precioNum = Number(precioRaw) || 0;
+
+        datosRenglones.push({
+          IDRVariante: codigoRC,
+          RVariante: descripcion,
+          cantidad: cantidadNum,
+          precio: precioNum,
+          suministro_nombre: (valoresFila[2] || '').trim(),
+          IDSubEtapa: (valoresFila[0] || '').trim(),
+        });
+      }
+
+      if (datosRenglones.length === 0) {
+        throw new Error('No se encontraron renglones válidos en el archivo Excel.');
+      }
+
+      // Insertar renglones en la base de datos
+      const obraIdFinal = idObra || objetodeobraIdFinal;
+      for (const renglon of datosRenglones) {
+        await agregarRCalObra(
+          db,
+          obraIdFinal,
+          renglon.IDSubEtapa,
+          objetodeobraIdFinal,
+          renglon.IDRVariante,
+          renglon.cantidad,
+          renglon.precio,
+          `Importado: ${renglon.RVariante || ''}`
+        );
+      }
+
+      // Recargar renglones asignados
+      if (obraIdFinal) {
+        setRenglonesAsignados(await obtenerRenglonesAsignados(db, obraIdFinal));
+      }
+
+      setImportacionMensaje(`Se importaron ${datosRenglones.length} renglón(es) correctamente.`);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      setImportacionError(`No se pudo importar el listado. ${detalle}`);
+    } finally {
+      setImportando(false);
+      setObjetoImportando(null);
+    }
+  };
+
+  const preguntarDestinoExportacion = () => {
+    setExportacionMensaje('');
+    setExportacionError('');
+    setExportacionVisible(true);
+  };
+
 
   useEffect(() => {
-    if (!db) {
-      return;
+    if (modalVisible) {
+      filtroRef.current.focus();
     }
-    // Cargar listas de actividades, cargos y equipos desde BD
-    //Tambien hay que cargar las Actividades de ficharhumanos, los Equipos de fichaequipos, los Recursos de fichainsumos y las partidas.
-    const fetchData = async () => {
-      try {
-        const actividadesDB = await db.getAllAsync("SELECT * FROM actividades;");
-        const cargosDB = await db.getAllAsync("SELECT * FROM cargos;");
-        const equiposDB = await db.getAllAsync("SELECT equipos.*, umedidas.umdescripcion FROM equipos JOIN umedidas ON umedidas.id = equipos.umexplotacion;");
-        const recursosDB = await db.getAllAsync("SELECT * FROM insumos;");
-        const insumosxequiposDB = await db.getAllAsync("SELECT insumosxequipos.*, insumos.insumo FROM insumosxequipos JOIN insumos ON insumos.id = insumosxequipos.insumo_id;");
-       const fichaEquiposDB = await db.getAllAsync("SELECT fichaequipos.*, equipos.equipo FROM fichaequipos JOIN equipos ON equipos.id = fichaequipos.equipo_id WHERE ficha_id = ?;", [fichaObj.id]);
-        const fichaActividadesDB = await db.getAllAsync("SELECT ficharhumanos.*, actividades.actividad, cargos.cargo, cargos.tarifahoraria FROM ficharhumanos JOIN actividades ON ficharhumanos.actividad_id = actividades.id JOIN cargos ON ficharhumanos.cargo_id = cargos.id WHERE ficharhumanos.ficha_id = ?;", [fichaObj.id]);
-        const fichaRecursosDB = await db.getAllAsync("SELECT fichainsumos.*, insumos.insumo, insumos.um, insumotipos.tipoinsumo FROM fichainsumos JOIN insumos ON insumos.id = fichainsumos.insumo_id JOIN insumotipos ON insumos.insumotipo_id = insumotipos.id WHERE fichainsumos.ficha_id = ?;", [fichaObj.id]);
-        setListaActividades(actividadesDB);
-        setCargos(cargosDB);
-        setListaEquipos(equiposDB);
-        setEquipos(fichaEquiposDB);
-        setActividades(fichaActividadesDB);
-        setRecursos(fichaRecursosDB);
-        setInsumosxequipos(insumosxequiposDB);
-        setListaRecursos(recursosDB);
-        setPrecioObra(fichaObj.precio);
-        const partidasDB = await db.getAllAsync("SELECT fichapartidas.*, plantillapartidas.concepto, plantillapartidas.fila, plantillapartidas.desglosarpartida  FROM fichapartidas JOIN plantillapartidas ON plantillapartidas.id = fichapartidas.plantilla_id WHERE fichapartidas.ficha_id = ? AND plantillapartidas.activo = 1;", [fichaObj.id]);
-        setPartidas(partidasDB);
-        const fichaSubpartidasDB = await db.getAllAsync("SELECT fichasubpartidas.*, plantillasubpartidas.concepto, plantillasubpartidas.fila, plantillasubpartidas.partida_id, plantillasubpartidas.editable  FROM fichasubpartidas JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE fichasubpartidas.ficha_id = ? AND plantillasubpartidas.activo = 1;", [fichaObj.id]);
-        setFichasubpartidas(fichaSubpartidasDB);
-      } catch (error) {
-        console.error('DEBUG: DetallesFichaScreen - Error in fetchData:', error);
-      }
-    };
-
-    fetchData();
-
-    return () => {
-    };
-  }, [db]); // Agregar db como dependencia para re-ejecutar si cambia
-
-  const agregarActividad = async (actividadNueva) => {
-     
-    if (!db) {
-      return;
-    }
-    // 1. Obtener coeficientes de la ficha
-    const fichaCoef = await db.getFirstAsync(
-      "SELECT * FROM fichas WHERE id = ?",
-      [fichaObj.id]
-    );
-    // 2. Obtener tarifahoraria del cargo y el nombre de la Actividad 
-    const elCargo = await db.getFirstAsync(
-      "SELECT * FROM cargos WHERE id = ?",
-      [actividadNueva.cargo_id]
-    );
-    const laActividad = await db.getFirstAsync("SELECT * FROM actividades WHERE id = ?",[actividadNueva.actividad_id]);
-
-    const tarifahoraria = Number(elCargo?.tarifahoraria ?? 0);
-    const cantidad = Number(actividadNueva.cantidad ?? 0);
-    const tiempo = Number(actividadNueva.tiempo ?? 0);
-    const cargo = elCargo.cargo;
-    const actividad = laActividad.actividad;
-
-    // 3. Calcular valores
-    const salariodevengado = tarifahoraria * cantidad * tiempo;
-    const vacaciones = salariodevengado * (Number(fichaCoef?.p100vacaciones ?? 0) / 100);
-    const contribuciones = salariodevengado * (Number(fichaCoef?.p100contribuciones ?? 0) / 100);
-    const gastos = salariodevengado * (Number(fichaCoef?.p100gastos ?? 0) / 100);
-    const impuestos = salariodevengado * (Number(fichaCoef?.p100impuestos ?? 0) / 100);
-    const costo = salariodevengado + vacaciones;
-    // 4. Añadir los campos calculados al objeto
-    const nextItem = actividades.length > 0 ? Math.max(...actividades.map(a => a.item)) + 1 : 1;
-    try {
-      const result = await db.runAsync(
-        `INSERT INTO ficharhumanos 
-          (item, ficha_id, actividad_id, cargo_id, cantidad, tiempo, descripcion, salariodevengado, vacaciones, contribuciones, gastos, impuestos, costo) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        [
-          nextItem,
-          fichaObj.id,
-          actividadNueva.actividad_id,
-          actividadNueva.cargo_id,
-          actividadNueva.cantidad,
-          actividadNueva.tiempo,
-          actividadNueva.argumentacion,
-          salariodevengado,
-          vacaciones,
-          contribuciones,
-          gastos,
-          impuestos,
-          costo
-        ]
-      );
-
-      // Recuperar el id insertado
-      const insertId = result?.lastInsertRowId;
-
-      // Crear el objeto con el id real
-      const nuevaAct = {
-        id: insertId,
-        item: nextItem,
-        ...actividadNueva,
-        descripcion: actividadNueva.argumentacion,
-        salariodevengado,
-        vacaciones,
-        contribuciones,
-        gastos,
-        impuestos,
-        costo,
-        tarifahoraria,
-        cargo,
-        actividad
-        
-      };
-
-      setActividades([...actividades, nuevaAct]);
-      actualizarImportes(fichaObj.id);
-    } catch (error) {
-    }
-  };
-  const eliminarActividad = async (id) => {
-    if (!db) {
-      return;
-    }
-    Alert.alert(
-      'Confirmar eliminación',
-      '¿Está seguro que desea eliminar esta actividad?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setActividades(actividades.filter(a => a.id !== id));            
-              await db.runAsync(`DELETE FROM ficharhumanos WHERE id = ?;`, [id]);
-              actualizarImportes(fichaObj.id);
-            } catch (error) {
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const insertarOActualizarInsumo = async (ficha_id, insumo, cantidadInsumo, costo, hook_id, descripcionInsumo, idlistado, itemFicha) => {
-    if (!db) {
-      return;
-    }
-   try {
-        const temp = await db.getFirstAsync(`
-            SELECT * 
-            FROM fichainsumos 
-            WHERE ficha_id = ? AND insumo_id = ? AND precio = ? 
-            `, [ficha_id, insumo.insumo_id, insumo.precio]
-          );         
-
-          const fichaInsumos = await db.getFirstAsync(`
-            SELECT * 
-            FROM fichainsumos 
-            WHERE ficha_id = ? AND insumo_id = ? AND precio = ? AND hook_id = ?
-            `, [ficha_id, insumo.insumo_id, insumo.precio, '[' + hook_id + ']']
-          );
-         
-          if (fichaInsumos) {
-              // Actualizar Ficha de Insumos existente 
-              await db.runAsync("UPDATE fichainsumos SET cantidad = ?, precio = ?, costo = ?, descripcion = ? WHERE id = ?", [cantidadInsumo, insumo.precio, costo, descripcionInsumo, fichaInsumos.id]);
-              
-          } else {
-              // Insertar Ficha de Insumos Nueva
-                const fichaItem = await db.getFirstAsync(`SELECT COUNT(id) as cantidad FROM fichainsumos WHERE ficha_id = ?`, [ficha_id]);
-                let itemFicha = fichaItem ? fichaItem.cantidad : 0;
-                itemFicha++;
-                let hooks = [Number(hook_id)];
-                let hooksJson = JSON.stringify(hooks);
-                await db.runAsync(`
-                  INSERT INTO fichainsumos (ficha_id, insumo_id, idlistado, item, cantidad, precio, costo, hook_id, descripcion) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                  , [ficha_id, insumo.insumo_id, idlistado, itemFicha, cantidadInsumo, insumo.precio, costo, hooksJson, descripcionInsumo]
-                );                    
-            }    
-            //actualizar recursos
-            const fichaRecursosDB = await db.getAllAsync("SELECT fichainsumos.*, insumos.insumo, insumos.um, insumotipos.tipoinsumo FROM fichainsumos JOIN insumos ON insumos.id = fichainsumos.insumo_id JOIN insumotipos ON insumos.insumotipo_id = insumotipos.id WHERE fichainsumos.ficha_id = ?;", [fichaObj.id]);
-            setRecursos(fichaRecursosDB);
-    } catch (error) {
-    }
-  };
-
-  const procesarInsumos = async (equipoCalculado, hook_id, elequipo) => {
-    if (!db) {
-      return;
-    }
-    try {
-      const insumosxequipos = await db.getAllAsync(`
-        SELECT insumosxequipos.*, insumotipos.insumogrupo_id
-        FROM insumosxequipos 
-        INNER JOIN insumos ON insumos.id = insumosxequipos.insumo_id
-        INNER JOIN insumotipos ON insumotipos.id = insumos.insumotipo_id
-        WHERE equipo_id = ?;
-      `, [equipoCalculado.equipo_id]);
-
-      const fichaItem = await db.getFirstAsync("SELECT COUNT(id) as cantidad FROM fichainsumos WHERE ficha_id = ?", [fichaObj.id]);
-      let itemFicha = fichaItem ? fichaItem.cantidad : 0;
-
-      for (const insumo of insumosxequipos) {
-        let cantidadInsumo;
-
-        if (insumo.insumogrupo_id == 2) { // combustibles
-          cantidadInsumo = equipoCalculado.cantidinsumoTotal / insumo.indiceconsumo;
-        } else if (insumo.insumogrupo_id == 3) { // Energía
-          cantidadInsumo = equipoCalculado.cantidinsumoTotal * insumo.indiceconsumo;
-        }
-
-        let costo = cantidadInsumo * insumo.precio;
-        let descripcionInsumo = `${cantidadInsumo.toFixed(2)} ${insumo.um} del equipo "${elequipo}"`;
-
-        await insertarOActualizarInsumo(fichaObj.id, insumo, cantidadInsumo, costo, hook_id, descripcionInsumo, equipoCalculado.idlistado, itemFicha);
-      }
-    } catch (error) {
-    }
-  };
-
-  const agregarEquipo = async (equipoNuevo) => {
-    if (!db) {
-      return;
-    }
-    const nextItem = equipos.length > 0 ? Math.max(...equipos.map(a => a.item)) + 1 : 1;
-    const elEquipo = await db.getFirstAsync("SELECT * FROM equipos WHERE id = ?",[equipoNuevo.equipo_id]);
-    try {
-      const equipoCalculado = await calcularEquipo(equipoNuevo);
-      const result = await db.runAsync(
-        `INSERT INTO fichaequipos (ficha_id, equipo_id, idlistado, item, cantidad, umedida_id, tarifaunitaria, costo, cantidadhe, depreciacion, mantenimiento, descripcion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        [fichaObj.id, equipoCalculado.equipo_id, equipoCalculado.idlistado, nextItem, equipoCalculado.cantidad, equipoCalculado.umedida_id, equipoCalculado.tarifaunitaria, equipoCalculado.costo, equipoCalculado.cantidadhe, equipoCalculado.depreciacion, equipoCalculado.mantenimiento, equipoCalculado.descripcion]
-      );
-      
-      const hook_id = result?.lastInsertRowId;
-      const nuevoEq = { id: hook_id, ...equipoCalculado, equipo: elEquipo.equipo, item: nextItem };      
-      setEquipos([...equipos, nuevoEq]);
-
-      await procesarInsumos(equipoCalculado, hook_id, elEquipo.equipo);
-      actualizarImportes(fichaObj.id);
-    } catch (error) {
-    }
-  };
-
-  const calcularEquipo = async (datos) => {
-    if (!db) {
-      return;
-    }
-    const { ficha_id, equipo_id, item, cantidad, cantidadhe,  argumentacion } = datos;
-    // Obtener datos del equipo
-    const row = await db.getFirstAsync("SELECT * FROM equipos WHERE id = ?", [equipo_id]);
-    if (!row) throw new Error("No se encontró el equipo con el ID proporcionado.");
-   
-    const elequipo = row.equipo;
-    const indicemtto = row.indicemtto;
-   // let cantidadhe = tiempo;
-    let vidaUtilHoras = 0;
-    let cantidadheTotal = 0;
-    let cantidinsumoTotal = 0;
-
-    if (row.umexplotacion === 'KM') {
-      vidaUtilHoras = row.vidautil / 50;
-    } else {
-      vidaUtilHoras = row.vidautil;
-    }
-
-    if (row.umexplotacion === 'HE') {
-      cantidadheTotal = cantidadhe * cantidad;
-      cantidinsumoTotal = cantidadhe * cantidad;
-    } else {
-      cantidadheTotal = cantidadhe;
-      cantidinsumoTotal = cantidad;
-    }
-
-    const depreciaxHora = (row.valorinicial - row.valorresidual) / vidaUtilHoras;
-    const depreciacion = depreciaxHora * cantidadheTotal;
-    const mantenimiento = (indicemtto / 100) * depreciacion;
-    const umedida_id = row.umexplotacion;
-    const costo = depreciacion + mantenimiento;
-    const idlistado = null;
-
-    // Crear el objeto equipo
-    return {
-      ficha_id,
-      equipo_id,
-      idlistado,
-      item,
-      cantidad,
-      umedida_id,
-      cantidadhe,
-      depreciacion,
-      mantenimiento,
-      costo,
-      cantidinsumoTotal,
-      descripcion: argumentacion,
-      elequipo
-    };
-  };
-
-   const eliminarEquipo = async (id) => {
-    if (!db) {
-      return;
-    }
-    
-    Alert.alert(
-      'Confirmar eliminación',
-      '¿Está seguro que desea eliminar este Equipo?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive',
-          onPress: async () => {
-            
-          try {
-            setEquipos(equipos.filter(a => a.id !== id));
-            //const elEquipo = await db.getFirstAsync(`SELECT equipo_id FROM fichaequipos WHERE id = ?`, [id]);
-            await db.runAsync(`DELETE FROM fichaequipos WHERE id = ?;`, [id]);
-            await db.runAsync(`DELETE FROM fichainsumos WHERE hook_id = ?;`, ['[' + id + ']']);
-            //actualizar recursos
-            const fichaRecursosDB = await db.getAllAsync("SELECT fichainsumos.*, insumos.insumo, insumos.um, insumotipos.tipoinsumo FROM fichainsumos JOIN insumos ON insumos.id = fichainsumos.insumo_id JOIN insumotipos ON insumos.insumotipo_id = insumotipos.id WHERE fichainsumos.ficha_id = ?;", [fichaObj.id]);
-            setRecursos(fichaRecursosDB);
-            actualizarImportes(fichaObj.id);
-          } catch (error) {
-          }
-          }
-        }
-      ]
-    );
-  };
-
-  const agregarRecurso = async (recursoNuevo) => {
-    if (!db) {
-      return;
-    }
-  const elRecurso = await db.getFirstAsync("SELECT * FROM insumos WHERE id = ?",[recursoNuevo.insumo_id]);
-
-  const cantidad = Number(recursoNuevo.cantidad ?? 0);
-  const precio = Number(recursoNuevo.precio ?? 0);
-  const insumo = elRecurso.insumo;
-  const um = elRecurso.um;
-  const costo = precio * cantidad;
-  
-  const nextItem = recursos.length > 0 ? Math.max(...recursos.map(a => a.item)) + 1 : 1;
-
-  try {
-      const result = await db.runAsync(
-      `INSERT INTO fichainsumos 
-        (item, ficha_id, insumo_id, cantidad, precio, descripcion,  costo) 
-        VALUES (?, ?, ?, ?, ?, ?, ?);`,
-      [
-        nextItem,
-        fichaObj.id,
-        recursoNuevo.insumo_id,
-        recursoNuevo.cantidad,
-        recursoNuevo.precio,
-        recursoNuevo.descripcion,
-        costo
-      ]
-      );
-
-      const insertId = result?.lastInsertRowId;
-     // Crear el objeto con el id real
-    const nuevoRec = {
-      id: insertId,
-      item: nextItem,
-      ...recursoNuevo,
-      costo,
-      um,
-      insumo      
-    };
-
-    setRecursos([...recursos, nuevoRec]);     
-      actualizarImportes(fichaObj.id);
-    } catch (error) {
-    }
-  };
-
-const eliminarRecurso = async (id) => {
-    if (!db) {
-      return;
-    }
-    Alert.alert(
-      'Confirmar eliminación',
-      '¿Está seguro que desea eliminar este recurso?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-            setRecursos(recursos.filter(a => a.id !== id));   
-            await db.runAsync(`DELETE FROM fichainsumos WHERE id = ?;`, [id]);
-          actualizarImportes(fichaObj.id);
-          } catch (error) {
-          }
-          }
-        }
-      ]
-    );
-  };
-
-  const actualizarImportes = async (ficha_id) => {
-    if (!db) {
-      return;
-    }
-    try {
-      // FILA 1: Gasto Material Plantilla_id 1
-      let resultado = await db.getFirstAsync("SELECT SUM(costo) as total FROM fichainsumos WHERE ficha_id = ?", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para fichainsumos.");
-      let f1 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f1, ficha_id, 1]);   
-      // FILA 1.1: Materias primas y materiales Plantilla_id 2       
-      resultado = await db.getFirstAsync(`
-          SELECT SUM(fichainsumos.costo) as total 
-          FROM fichainsumos 
-          LEFT JOIN insumos ON insumos.id = fichainsumos.insumo_id 
-          LEFT JOIN insumotipos ON insumotipos.id = insumos.insumotipo_id 
-          WHERE fichainsumos.ficha_id = ? AND insumotipos.insumogrupo_id = 1
-      `, [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para materias primas.");
-      let fmateriasprimas = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fmateriasprimas, ficha_id, 2]);
-
-      // FILA 1.2: Combustible y lubricantes plantilla_id 3  insumogrupo_id 2      
-      resultado = await db.getFirstAsync(`
-          SELECT SUM(fichainsumos.costo) as total 
-          FROM fichainsumos 
-          INNER JOIN insumos ON insumos.id = fichainsumos.insumo_id 
-          INNER JOIN insumotipos ON insumotipos.id = insumos.insumotipo_id 
-          WHERE fichainsumos.ficha_id = ? AND insumotipos.insumogrupo_id = 2
-      `, [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para combustibles.");
-      let fcombustibles = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fcombustibles, ficha_id, 3]);
-
-      // FILA 1.3: Energía  Plantilla_id 4 insumogrupo_id 3
-      resultado = await db.getFirstAsync(`
-          SELECT SUM(fichainsumos.costo) as total 
-          FROM fichainsumos 
-          INNER JOIN insumos ON insumos.id = fichainsumos.insumo_id 
-          INNER JOIN insumotipos ON insumotipos.id = insumos.insumotipo_id 
-          WHERE fichainsumos.ficha_id = ? AND insumotipos.insumogrupo_id = 3
-      `, [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para energía.");
-      let fenergia = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fenergia, ficha_id, 4]);
-
-      // FILA 1.4: Agua Plantilla_id 5 insumogrupo_id 4
-      resultado = await db.getFirstAsync(`
-          SELECT SUM(fichainsumos.costo) as total 
-          FROM fichainsumos 
-          INNER JOIN insumos ON insumos.id = fichainsumos.insumo_id 
-          INNER JOIN insumotipos ON insumotipos.id = insumos.insumotipo_id 
-          WHERE fichainsumos.ficha_id = ? AND insumotipos.insumogrupo_id = 4
-      `, [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para agua.");
-      let fagua = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fagua, ficha_id, 5]);
-
-      // FILA 2: Calcular Salario + Vacaciones Plantilla_id 6
-      resultado = await db.getFirstAsync("SELECT SUM(costo) AS total FROM ficharhumanos WHERE ficha_id = ?", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para ficharhumanos.");
-      let f2 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f2, ficha_id, 6]);
-
-      // FILA 3: Otros Gastos Directos partida_id 7
-      // Depreciación de los activos fijos tangibles que intervienen directamente en el proceso  plantilla_id de subpartida 2
-      resultado = await db.getFirstAsync("SELECT SUM(depreciacion) as total FROM fichaequipos WHERE ficha_id = ?", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para fichaequipos.");
-      let fdaf = resultado.total || 0;
-      await db.runAsync("UPDATE fichasubpartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fdaf, ficha_id, 2]);
-      // Pagos por mantenimientos y reparaciones recibidos  plantilla_id de subpartida 1
-      resultado = await db.getFirstAsync("SELECT SUM(mantenimiento) as total FROM fichaequipos WHERE ficha_id = ?", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para fichaequipos.");
-      let fpmrr = resultado.total || 0;
-      await db.runAsync("UPDATE fichasubpartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fpmrr, ficha_id, 1]);
-      // Otros Gastos Directos   partida_id 7
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 7", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para fichaequipos.");
-      let f3 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f3, ficha_id, 7]);
-
-      // FILA 4: Gastos asociados a la producción partida_id 8
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 8", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para fichasubpartidas.");
-      let f4 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f4, ficha_id, 8]);
-
-      // FILA 5: TOTAL DE COSTOS (F1 + F2 + F3 + F4) Plantilla_id 10
-      let f5 = f1 + f2 + f3 + f4;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f5, ficha_id, 10]);
-
-      // FILA 6: GASTOS GENERALES Y DE ADMINISTRACIÓN partida_id 11
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 11", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para gastos generales.");
-      let f6 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f6, ficha_id, 11]);
-
-      // FILA 7: Gastos de Distribución y Venta partida_id 13
-      // Gastos de distribución y venta plantilla_id de subpartida 35
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichapartidas WHERE ficha_id = ? AND plantilla_id = 13", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para otros gastos directos.");
-      let fgdv = resultado.importe || 0;
-      await db.runAsync("UPDATE fichasubpartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fgdv, ficha_id, 35]);
-
-      // FILA 7: Gastos de Distribución y Venta partida_id 13
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 13", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para gastos generales.");
-      let f7 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f7, ficha_id, 13]);
-      // Salarios de Gastos de Distribución y Venta partida_id 14
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 14", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para gastos generales.");
-      let f71 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f71, ficha_id, 14]);
-
-      // FILA 8: Gastos Financieros partida_id 15
-      resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 15", [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para gastos generales.");
-      let f8 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f8, ficha_id, 15]);
-
-      // FILA 9 Gastos por Financiamiento entregado a la OSDE partida_id 16
-      let laficha = await db.getFirstAsync("SELECT * FROM fichas WHERE id = ?", [ficha_id]);
-      let f9 = 0;
-      if (laficha.p100osde) {
-        f9 = (laficha.p100osde * (f2 + f4 + f6 + f7 + f8)) / 100;
-      } else {
-        resultado = await db.getFirstAsync("SELECT SUM(importe) as total FROM fichasubpartidas INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 16", [ficha_id]);
-        if (!resultado) throw new Error("No se encontraron resultados para gastos generales.");
-        f9 = resultado.total || 0;
-      }
-      await db.runAsync("UPDATE fichasubpartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f9, ficha_id, 40]);
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f9, ficha_id, 16]);
-
-      const ficha = await db.getFirstAsync("SELECT * FROM fichas WHERE id = ?", [ficha_id]);
-      if (!ficha) throw new Error("No se encontró la ficha.");
-
-      // FILA 10: Gastos Tributarios
-      // Impuesto sobre la Fuerza de Trabajo  plantilla_id de subpartida 41
-      let fift = (ficha.p100impuestosft * f2) / 100;
-      await db.runAsync("UPDATE fichasubpartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fift, ficha_id, 41]);
-      // Gastos Tributarios: Contribución a la Seguridad Social  plantilla_id de subpartida 42  
-      let fcss = (ficha.p100contribuciones * f2) / 100;
-      await db.runAsync("UPDATE fichasubpartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [fcss, ficha_id, 42]);
-      // Gastos Tributarios partida_id 17
-      resultado = await db.getFirstAsync(`
-          SELECT SUM(importe) as total 
-          FROM fichasubpartidas 
-          INNER JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id 
-          WHERE ficha_id = ? AND plantillasubpartidas.partida_id = 17
-          `, [ficha_id]);
-      if (!resultado) throw new Error("No se encontraron resultados para gastos generales.");
-      let f10 = resultado.total || 0;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f10, ficha_id, 17]);
-
-      // FILA 11: TOTAL DE GASTOS (F6+F7+F8+F9+F10) plantilla_id 18
-      let f11 = f6 + f7 + f8 + f9 + f10;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f11, ficha_id, 18]);
-
-      // FILA 12: TOTAL DE GASTOS (F5 + F11) plantilla_id 19
-      let f12 = f5 + f11;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f12, ficha_id, 19]);
-
-      // FILA 13: UTILIDAD plantilla_id 20       
-      const putilidad = ficha.p100utilidades;
-      let f13 = f12 * putilidad / 100;
-      await db.runAsync("UPDATE fichapartidas SET importe = ? WHERE ficha_id = ? AND plantilla_id = ?", [f13, ficha_id, 20]);
-
-      // FILA 14: Actualizar precio de la Ficha
-      const precio = f12 + f13;
-      await db.runAsync("UPDATE fichas SET precio = ? WHERE id = ?", [precio, ficha_id]);
-
-      // Devolver un objeto con los resultados 
-      const importes = {
-        f1,
-        fmateriasprimas,
-        fcombustibles,
-        fenergia,
-        f2,
-        f3,
-        f4,
-        f5,
-        f6,
-        f7,
-        f71,
-        f8,
-        f9,
-        fift,
-        fcss,
-        f10,
-        precio
-      };
-
-      setPrecioObra(precio);
-      const partidasDB = await db.getAllAsync("SELECT fichapartidas.*, plantillapartidas.concepto, plantillapartidas.fila, plantillapartidas.desglosarpartida  FROM fichapartidas JOIN plantillapartidas ON plantillapartidas.id = fichapartidas.plantilla_id WHERE fichapartidas.ficha_id = ? AND plantillapartidas.activo = 1;", [fichaObj.id]);
-      setPartidas(partidasDB);
-
-      return {
-        success: true,
-        importes
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  };
-
-
-  const handleGuardarPartida = async (losDrafts) => {
-    if (!db) {
-      return;
-    }
-    try {
-      for (const concepto of losDrafts) {
-        await db.runAsync(
-          "UPDATE fichasubpartidas SET importe = ?, salarios = ?, argumentacion = ? WHERE plantilla_id = ? AND ficha_id = ?",
-          [concepto.importe, concepto.salarios, concepto.argumentacion, concepto.plantilla_id, fichaObj.id]
-        );
-      }
-      await actualizarImportes(fichaObj.id);
-      // Recargar fichasubpartidas para reflejar cambios
-      const fichaSubpartidasDB = await db.getAllAsync("SELECT fichasubpartidas.*, plantillasubpartidas.concepto, plantillasubpartidas.fila, plantillasubpartidas.partida_id, plantillasubpartidas.editable  FROM fichasubpartidas JOIN plantillasubpartidas ON plantillasubpartidas.id = fichasubpartidas.plantilla_id WHERE fichasubpartidas.ficha_id = ? AND plantillasubpartidas.activo = 1;", [fichaObj.id]);
-      setFichasubpartidas(fichaSubpartidasDB);
-    } catch (error) {
-    }
-  };
+  }, [modalVisible]);
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={commonStyles.gradienteContainer}>
-        <Link href="/Fichas" asChild>
-          <FontAwesome5 style={{ marginLeft: 8, float: "right" }} name="arrow-left" size={20} color="#ffffff" />
-        </Link>
-        <View style={{flexDirection: 'row', alignItems: 'center',}}>
-          <FontAwesome5 name="file" size={14} color="#ffffffff" />
-          <Text style={commonStyles.headerText}>Detalles de la Ficha</Text>
-        </View>
-        {isPremiumDisabled()  ? (
-          <TouchableOpacity onPress={() => setShowLicenseAlert(true)} style={{ marginRight: 8, float: "right" }}>
-            <FontAwesome5 name="exclamation-triangle" size={20} color="#ffff" />
-          </TouchableOpacity>
-        ) : <Text></Text>}  
-      </View>
-      <View id="nombreObraDetalles" style={{ backgroundColor: '#4c669f', borderTopLeftRadius: 5, borderTopEndRadius: 5, paddingHorizontal: 5}}>
-          <Text style={{color: 'white', fontWeight: 'bold', paddingTop: 6, paddingHorizontal: 5}}>{fichaObj.identidad.toUpperCase()}</Text>
-          <Text style={{color: 'white',  paddingHorizontal: 5, paddingTop: 5}}>{fichaObj.obra}</Text>
-          
-          <View style={commonStyles.etiquetaPrecio}>
-              <Text>
-               Precio:  $ {Number(precioObra || 0).toFixed(2)}
-              </Text>
-            </View>          
-      </View>
-
-      <Tab.Navigator     
-         screenOptions={{
-            tabBarShowLabel: false,
-          }}
-          tabBar={props => <MyTabBar {...props} />}
-      >
-        <Tab.Screen name="Actividades">
-          {() => (
-            <ActividadesScreen
-              actividades={actividades}
-              listaActividades={listaActividades}
-              cargos={cargos}
-              agregarActividad={agregarActividad}
-              eliminarActividad={eliminarActividad}
-              isPremiumDisabled={isPremiumDisabled}
-            />
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Equipos">
-          {() => (
-            <EquiposScreen
-              equipos={equipos}
-              listaEquipos={listaEquipos}
-              agregarEquipo={agregarEquipo}
-              eliminarEquipo={eliminarEquipo}
-              insumosxequipos={insumosxequipos}
-              isPremiumDisabled={isPremiumDisabled}
-            />
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Recursos">
-          {() => (
-            <RecursosScreen
-              recursos={recursos}
-              listaRecursos={listaRecursos}
-              agregarRecurso={agregarRecurso}
-              eliminarRecurso={eliminarRecurso}
-              isPremiumDisabled={isPremiumDisabled}
-            />
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Partidas">
-          {() => (
-            <PartidasScreen 
-            partidas={partidas} 
-            fichasubpartidas={fichasubpartidas} 
-            handleGuardarPartida={handleGuardarPartida} 
-            conceptos={conceptos} 
-            setConceptos={setConceptos}
-              isPremiumDisabled={isPremiumDisabled}
-            />
-            )}
-        </Tab.Screen>
-      </Tab.Navigator>
-
-      {/* Alerta de licencia no activa */}
-      {showLicenseAlert && (
-        <View style={styles.alertOverlay}>
-          <View style={styles.alertContainer}>
-            <View style={styles.alertHeader}>
-              <Text style={styles.alertTitle}>{getLicenseAlertTitle()}</Text>
-              <TouchableOpacity onPress={() => setShowLicenseAlert(false)} style={styles.alertCloseButton}>
-                <Text style={styles.alertCloseText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.alertMessage}>
-              {getLicenseAlertMessage()}
+    
+    <View style={styles.contentContainer}>
+      <ScreenHeader
+        title={'PRELIMINARES' }
+        count={renglonesAsignados.length }
+        onBack={() => router.back()}
+      />
+       
+      <Text style={styles.headerFiltro}>{laObra.obra ? laObra.obra.toUpperCase() : '' }
+      </Text>
+      
+      <View style={styles.listModeContainer}>
+          <View style={styles.assignedListTitle}>
+            <Text style={styles.assignedPrice}>
+              Costo:  ${costoTotalObra.toFixed(2)}
             </Text>
-            <Link href="/Licencia" style={styles.alertButton}>
-              <Text style={styles.alertButtonText}>Ir a Zona de Licencia</Text>
-            </Link>
+          </View>
+          <Link href="/Renglones" asChild>
+                      <Pressable style={{alignItems: 'center', marginRight: 10}}>
+                      <FontAwesome5 name="bars" size={20} color="#192f6a" />
+                      </Pressable>
+                    </Link>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Generar Excel del listado de cantidades"
+            onPress={preguntarDestinoExportacion}
+            style={styles.exportButton}
+          >
+            <FontAwesome5 name="file-excel" size={16} color="#ffffff" />
+          </Pressable>
+      </View>
+      
+    <FlatList
+      style={{ paddingHorizontal: 5}}
+      data={renglonesAsignados}
+      keyExtractor={(item) => item.asignacion_id.toString()}
+      renderItem={({ item, index }) => (
+        <View>
+          {(index === 0 || renglonesAsignados[index - 1].objetodeobra_id !== item.objetodeobra_id) && (
+            <Swipeable
+              renderRightActions={() => (
+                <RectButton
+                  accessibilityRole="button"
+                  accessibilityLabel={`Eliminar ${item.objetodeobra || 'objeto de obra'} de la obra`}
+                  onPress={() => confirmarEliminarObjetoDeObra(item)}
+                  style={styles.swipeDeleteAction}
+                >
+                  <FontAwesome5 name="trash" size={18} color="#fff" />
+                </RectButton>
+              )}
+            >
+              <View style={styles.objetoObraHeader}>
+                <Text style={styles.objetoObraHeading}>
+                  {item.objetodeobra || 'Por defecto'}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Exportar cantidades de ${item.objetodeobra || 'objeto de obra'}`}
+                  onPress={() => exportarObjetoDeObra(item.objetodeobra_id)}
+                  style={styles.exportObjetoButton}
+                  disabled={objetoExportando === item.objetodeobra_id || exportando}
+                >
+                  <FontAwesome5 name="file-excel" size={14} color="#ffffff" />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Importar cantidades de ${item.objetodeobra || 'objeto de obra'}`}
+                  onPress={() => {
+                    setObjetoImportando(item.objetodeobra_id);
+                    setImportModalVisible(true);
+                  }}
+                  style={styles.importObjetoButton}
+                  disabled={objetoImportando === item.objetodeobra_id || importando}
+                >
+                  <FontAwesome5 name="file-import" size={14} color="#ffffff" />
+                </Pressable>
+                <Text style={styles.assignedPrice}>
+                  $
+                  {(totalesPorObjeto.get(String(item.objetodeobra_id ?? 'default')) ?? 0).toFixed(2)}
+                </Text>
+              </View>
+            </Swipeable>
+          )}
+          <Swipeable
+            renderRightActions={() => (
+              <RectButton
+                accessibilityRole="button"
+                accessibilityLabel={`Eliminar renglón ${item.IDRVariante} de la obra`}
+                onPress={() => confirmarEliminarRenglon(item)}
+                style={styles.swipeDeleteAction}
+              >
+                <FontAwesome5 name="trash" size={18} color="#fff" />
+              </RectButton>
+            )}
+          >
+            <View style={commonStyles.detallesItemContainer}>
+
+              <View style={{ flex: 1, flexDirection: 'row'}}>
+              <Text style={styles.subetapa}>
+                  Etapa: {item.IDSubEtapa || ''} {item.SubEtapa || ''}
+                </Text>              
+              </View>
+
+              <View style={styles.assignedLineHeader}>                
+                <Text style={commonStyles.campoCodigo}>{item.IDRVariante}</Text>
+                <Text
+                  style={styles.assignedHierarchy}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {[item.SobreGrupo, item.Grupo, item.SubGrupo].filter(Boolean).join(' | ') || 'Sin jerarquía'}
+                </Text>
+              </View>
+              <Text style={styles.assignedDescription}>{item.RVariante || 'Renglón sin descripción'}</Text>
+              {!!item.suministro_nombre && (
+                <Text style={styles.assignedNotes}>
+                  {`Suministro: ${item.suministro_nombre} (${item.IDRecurso})`}
+                </Text>
+              )}
+              <View style={{ flex: 1, flexDirection: 'row'}}>
+              <Text style={styles.assignedPrice}>
+                  {item.cantidad} x {item.umedicion || ''}
+                </Text>
+              <Text style={styles.assignedPrice}>Precio: ${Number(item.precio ?? 0).toFixed(2)}</Text>
+              <Text style={styles.assignedPrice}>
+                Costo: ${(Number(item.precio ?? 0) * Number(item.cantidad ?? 0)).toFixed(2)}
+              </Text>
+              </View>
+              {!!item.observaciones && <Text style={styles.assignedNotes}>{item.observaciones}</Text>}
+            </View>
+          </Swipeable>
+        </View>
+      
+      ) }
+      ListEmptyComponent={
+       (
+        <View>
+          <Text style={styles.emptyAssignedList}>Esta obra aún no tiene renglones asignados.</Text>
+          
+                    <Link href="/Renglones" asChild>
+                      <Pressable style={{alignItems: 'center'}}>
+                      <FontAwesome5 name="bars" size={30} color="#192f6a" />
+                      <Text 
+                        style={styles.cabecera}
+                        adjustsFontSizeToFit
+                        numberOfLines={1}
+                        minimumFontScale={0.6}
+                      >
+                          Ir a Renglones
+                        </Text>
+                       
+                      </Pressable>
+                    </Link>
+                    
+        </View>
+        )
+      }
+      onEndReached={undefined}
+      onEndReachedThreshold={undefined}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews
+    />
+
+     
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelar}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>
+              Filtrado
+            </Text>
+
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingBottom: 16}}>
+              <Text style={styles.label}>Filtro</Text>
+              <TextInput
+                ref={filtroRef}
+                style={commonStyles.input}
+                placeholder="Filtro..."
+                value={filtro}
+                onChangeText={setFiltro}
+              />  
+             
+            </ScrollView>
+             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+                <TouchableOpacity style={commonStyles.buttonAgregar} onPress={handleFiltrar} >
+                  <Text style={commonStyles.buttonTextAgregar}>Filtrar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={commonStyles.buttonCancelar} onPress={handleCancelar} >
+                  <Text style={commonStyles.buttonTextAgregar}>Cancelar</Text>
+                </TouchableOpacity>
           </View>
         </View>
-      )}
+      </View>
+      </Modal>
+
+      <Modal
+        visible={importModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!importando) setImportModalVisible(false);
+        }}
+      >
+        <View style={styles.importModalOverlay}>
+          <View style={styles.importModalContainer}>
+            <Text style={styles.importModalTitle}>Importar cantidades de objeto de obra</Text>
+            <Text style={styles.importModalMessage}>
+              {importando
+                ? 'Procesando el archivo Excel...'
+                : importacionError || importacionMensaje || 'Selecciona un archivo Excel (.xlsx) para importar.'}
+            </Text>
+            {!importando && !importacionError && !importacionMensaje && (
+              <View style={styles.importModalActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setImportModalVisible(false);
+                    importarCantidadesObjeto(objetoImportando);
+                  }}
+                  style={[styles.importModalButton, styles.importSaveButton]}
+                >
+                  <Text style={styles.importModalButtonText}>Seleccionar archivo Excel</Text>
+                </Pressable>
+              </View>
+            )}
+            {!importando && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setImportModalVisible(false)}
+                style={styles.importModalCancel}
+              >
+                <Text style={styles.importModalCancelText}>
+                  {importacionError || importacionMensaje ? 'Cerrar' : 'Cancelar'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+
     </View>
+
+      <Modal
+        visible={modalDetalleVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelar}
+      >
+        <View style={styles.modalOverlay2}>
+          <View style={styles.modalContainer2}>
+          <View style={commonStyles.gradienteContainer}>
+          <TouchableOpacity  onPress={handleCancelar} >
+            <FontAwesome5 style={{ marginRight: 10}} name="arrow-left" size={20} color="#192f6a" />
+                </TouchableOpacity>
+            
+            <View style={{flexDirection: 'row', alignItems: 'center',}}>
+              <Image          
+                source={require('../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              /> 
+              <View style={{flexDirection: 'column', alignItems: 'flex-start'}}>
+                <View style={{flexDirection: 'row',  justifyContent: 'space-between'}}>
+              <Text style={styles.headerText}>
+                ENCODIGO
+                </Text>
+                <Text style={styles.headerText2}>
+                PRECONS III   
+                </Text>
+              </View>
+                <Text style={styles.headerText}>
+                  DETALLES DEL RENGLÓN CONSTRUCTIVO        
+                </Text>
+              </View>
+            </View>
+            <Text></Text>
+          </View>
+          {elementoSeleccionado ?
+          <View style={styles.detallesItemContainer}>
+            <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0}}>
+              <Text style={commonStyles.campoCodigo}>{elementoSeleccionado.IDRVariante} </Text>
+              <Text 
+                style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1 }]} 
+                numberOfLines={3} 
+                ellipsizeMode="tail"
+              > 
+               {elementoSeleccionado.SobreGrupo}  | {elementoSeleccionado.Grupo}  | {elementoSeleccionado.SubGrupo}
+              </Text>
+            </View>
+              
+              <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold',  }} numberOfLines={2}>{elementoSeleccionado.RVariante}</Text>
+              <Text style={{ fontSize: 16, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', textAlign: 'center'  }}>Precio: ${Number(elementoSeleccionado.Precio ?? 0).toFixed(2)} x {elementoSeleccionado.umedicion}</Text>
+         
+
+
+          <View style={styles.resumenContainer2}>
+
+          <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
+            <View   style={styles.gradienteResumenContainerFichas}>               
+              <Text 
+                style={{textAlign: 'center',  marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Costo de Materiales
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${Number(elementoSeleccionado.CDMateriales ?? 0).toFixed(2)}
+                </Text>                      
+            </View>
+            <View style={styles.gradienteResumenContainerFichas}> 
+              <Text 
+                style={{textAlign: 'center', marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Costo Mano de Obra
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${Number(elementoSeleccionado.CDManoObra ?? 0).toFixed(2)}
+                </Text>
+            </View>
+          </View>
+
+          <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
+            <View   style={styles.gradienteResumenContainerFichas}>               
+              <Text 
+                style={{textAlign: 'center',  marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Costo Uso de Equipos
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${Number(elementoSeleccionado.CDUsoEquipos ?? 0).toFixed(2)}
+                </Text>                      
+            </View>
+            <View style={styles.gradienteResumenContainerFichas}> 
+              <Text 
+                style={{textAlign: 'center', marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Horas Hombre
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${elementoSeleccionado.HorasHombre}
+                </Text>
+            </View>
+          </View>
+
+          <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
+            <View   style={styles.gradienteResumenContainerFichas}>               
+              <Text 
+                style={{textAlign: 'center',  marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Horas Equipo
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${elementoSeleccionado.HorasEquipos}
+                </Text>                      
+            </View>
+            <View style={styles.gradienteResumenContainerFichas}> 
+              <Text 
+                style={{textAlign: 'center', marginTop: 2}}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.6}
+              >
+                  Horas Total
+                </Text>
+                <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
+                ${elementoSeleccionado.HorasTotal}
+                </Text>
+            </View>
+          </View> 
+          </View>
+          </View>          
+          : ''
+          }
+          {detallesRenglon ?
+            <ScrollView >
+              <Text style={{ fontSize: 12, fontFamily: 'FiraSans_400Regular', textAlign: 'left',  paddingHorizontal: 20  }}>
+                ELEMENTOS DE COMPOSICIÓN {detallesRenglon.length}
+              </Text>
+              
+              <FlatList
+                style={{ paddingHorizontal: 5}}
+                data={detallesRenglon}
+                keyExtractor={(item) => item.IDRecurso.toString()}
+                renderItem={({ item }) => (
+                  <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>
+                   
+                   
+                    <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+                      <Text style={commonStyles.campoCodigo2}>{item.IDRecurso} </Text>
+                      <Text style={{ fontSize: 12, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold' }}> {item.tiporecurso} </Text>
+                     </View>
+                     <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular' }}>{item.Recurso}</Text>
+                      <Text 
+                        style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1 }]} 
+                        numberOfLines={3} 
+                        ellipsizeMode="tail"
+                      >  
+                      <View style={{flexDirection: 'column'}}>
+                        
+                        <Text style={{ fontSize: 12, fontFamily: 'FiraSans_400Regular',  }}> {item.Peso ? `Precio: $` + item.Precio + ` | ` : ''} Norma: {item.Norma} x {item.umedicion} {item.Peso ? `| Peso:` + item.Peso + `kg` : ''}</Text>
+                      </View>
+                      </Text>
+                    
+                     
+                     
+                     
+                    
+                  </View>
+                )}
+                
+                windowSize={5}
+                removeClippedSubviews
+              />             
+            </ScrollView>
+            : ''
+            }
+              <Pressable
+                style={commonStyles.buttonFlotante}
+                onPress={() => agregarAObra()}
+              >
+                <FontAwesome5 name="plus" size={18} color="white" />
+              </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+
+      <Modal
+        visible={modalAgregarAObraVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelarAgregandoAObra}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+          <View style={commonStyles.gradienteContainer}>
+          <TouchableOpacity  onPress={handleCancelarAgregandoAObra} >
+            <FontAwesome5 style={{ marginRight: 10}} name="arrow-left" size={20} color="#192f6a" />
+                </TouchableOpacity>
+            
+            <View style={{flexDirection: 'row', alignItems: 'center',}}>
+              <Image          
+                source={require('../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              /> 
+              <View style={{flexDirection: 'row', alignItems: 'center',}}>                
+                <Text style={[styles.headerText, { flex: 1, flexShrink: 1 }]} 
+                  numberOfLines={3} 
+                  ellipsizeMode="tail"
+                  >
+                    AGREGANDO RC AL OBRA
+                </Text>
+              </View>
+            </View>
+            
+          </View>
+          {elementoSeleccionado ?
+          <View style={styles.detallesItemContainer}>
+            <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0}}>
+              <Text style={commonStyles.campoCodigo}>{elementoSeleccionado.IDRVariante} </Text>
+              <Text 
+                style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1, textTransform: 'lowercase' }]} 
+                numberOfLines={3} 
+                ellipsizeMode="tail"
+              > 
+               {elementoSeleccionado.SobreGrupo}  | {elementoSeleccionado.Grupo}  | {elementoSeleccionado.SubGrupo}
+              </Text>
+            </View>
+              
+              <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold' }}  numberOfLines={2}>{elementoSeleccionado.RVariante}</Text>
+              <Text style={{ fontSize: 16, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', textAlign: 'center'  }}>Precio: ${Number(elementoSeleccionado.Precio ?? 0).toFixed(2)} x {elementoSeleccionado.umedicion}</Text>
+                   
+          </View>          
+          : ''
+          }
+
+
+          {obras ?
+          <View style={styles.detallesItemContainer}>
+
+            <Text style={styles.label}>Obra</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={obra_id}
+                onValueChange={value => actualizarObraId(value)}
+              >
+                {obras.map(obra => (
+                  <Picker.Item key={obra.id} label={obra.obra} value={obra.id} />
+                ))}
+              </Picker>          
+            </View>
+
+            <Text style={styles.label}>Objeto de Obra</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={objetodeobra_id}
+                onValueChange={value => actualizarObjetodeobraId(value)}
+              >
+                {objetosdeobras.map(oo => (
+                  <Picker.Item key={oo.id} label={oo.objetodeobra} value={oo.id} />
+                ))}
+              </Picker>          
+            </View>
+
+            <Text style={styles.label}>Cantidad</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              value={cantidad}
+              onChangeText={text => setCantidad(text)}
+            />
+
+            <Text style={styles.label}>Ir a los detalles de la obra</Text>
+           
+            
+
+          <View style={commonStyles.buttonsRow}>
+            <TouchableOpacity style={commonStyles.buttonAgregar} onPress={handleAgregarRCalObra} >
+              <Text style={commonStyles.buttonTextAgregar}> AGREGAR </Text>
+            </TouchableOpacity>               
+          </View>
+            
+          </View>
+           : ''
+          }
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={exportacionVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!exportando) setExportacionVisible(false);
+        }}
+      >
+        <View style={styles.exportModalOverlay}>
+          <View style={styles.exportModalContainer}>
+            <Text style={styles.exportModalTitle}>Exportar listado de cantidades</Text>
+            <Text style={styles.exportModalMessage}>
+              {exportando
+                ? 'Generando el archivo Excel...'
+                : exportacionError || exportacionMensaje || '¿Qué deseas hacer con el archivo Excel?'}
+            </Text>
+            {!exportando && !exportacionError && !exportacionMensaje && (
+              <View style={styles.exportModalActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => exportarListado('guardar')}
+                  style={[styles.exportModalButton, styles.exportSaveButton]}
+                >
+                  <Text style={styles.exportModalButtonText}>Guardar en el teléfono</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => exportarListado('compartir')}
+                  style={[styles.exportModalButton, styles.exportShareButton]}
+                >
+                  <Text style={styles.exportModalButtonText}>Enviar por WhatsApp</Text>
+                </Pressable>
+              </View>
+            )}
+            {!exportando && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setExportacionVisible(false)}
+                style={styles.exportModalCancel}
+              >
+                <Text style={styles.exportModalCancelText}>
+                  {exportacionError || exportacionMensaje ? 'Cerrar' : 'Cancelar'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
+      
+    </View>
+
+
+
+    
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
-  detallesItemContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomColor: "#ccc",
-    borderBottomWidth: 1
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center"
-  },
-  modalContainer: {
-    width: 300,
-    backgroundColor: "white",
-    borderRadius: 8,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 15, textAlign: "center" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#999",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 15
-  },
-
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#4c669f',
-    justifyContent: 'space-around',
-    paddingVertical: 10,
-  },
-  tab: {
-    paddingHorizontal: 20,
-  },
-
-  row: {
+ container: { flex: 1,  backgroundColor: '#fff' },
+  resumenContainer2: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginVertical: 6,
   },
-  inputHalf: {
-    ...commonStyles.input,
-    width: '48%',
-  },
-
-  alertOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+  gradienteResumenContainer: {
     alignItems: 'center',
-    zIndex: 1000,
-  },
-  alertContainer: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 10,
-    width: '90%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  alertTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
-  },
-  alertMessage: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#666',
-    lineHeight: 20,
-  },
-  alertButton: {
-    backgroundColor: '#4a71c7',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
     borderRadius: 5,
-    marginTop: 10,
+    padding: 10,
+    width: '30%',
+    marginBottom: 10,
+    marginHorizontal: 2
   },
-  alertButtonText: {
-    color: 'white',
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    marginTop: 4,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  headerContainer: {
+    padding: 16,
+    backgroundColor: '#4b86b4',
+    marginBottom: 16,
+    borderRadius: 10,
+  }, detallesItemContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    margin: 5,
+},
+  contentContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    marginTop: 10
+  },
+  headerFiltro: {
+    color: '#192f6a',
+    marginLeft: 5,
+    paddingHorizontal: 10,
+    marginBottom: 0,
+    fontFamily: 'FiraSans_400Regular',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  alertHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  logo: {
+    width: 50,
+    height: 50,
+    
+  },
+  gradienteResumenContainerFichas: {
     alignItems: 'center',
-    marginBottom: 15,
+    backgroundColor: '#f2f2f2', 
+    borderRadius: 5,
+    padding: 5,
+    width: '40%',
+    marginBottom: 5,
+    overflow: 'hidden',
+    flexShrink: 1,
+    marginHorizontal: 20
+  },
+  resumenNumero: {
+      fontSize: 16,
+      fontWeight: 'bold',
+  },
+  headerText: {
+    color: '#192f6a',
+    marginLeft: 15,
+    fontWeight: 'bold',
+  },
+  headerText2: {
+    color: '#192f6a',
+    marginLeft: 15,
+  },
+
+
+  itemContainer: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    marginBottom: 12,
+  },
+  botonesCabecera: {
+    flexDirection: 'row',
+    marginTop: 8,
+    justifyContent: 'space-between',
     width: '100%',
   },
-  alertCloseButton: {
-    padding: 5,
-    borderRadius: 5,
-    backgroundColor: '#f0f0f0',
+  botonesContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    justifyContent: 'flex-end',
+    width: '100%',
   },
-  alertCloseText: {
-    fontSize: 20,
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4b86b4',
+    borderRadius: 5,
+    padding: 5,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#999',
+    borderRadius: 6,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  modalOverlay: {
+    flex:1,
+    backgroundColor: 'rgba(0,0,0,0.5)', // Semi transparente para modal
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    width: '100%',
+    maxHeight: '85%',
+    padding: 16,
+  },
+  modalOverlay2: {
+    flex:1,
+    backgroundColor: 'rgba(0,0,0,0.5)', // Semi transparente para modal
+    alignItems: 'center',
+  },
+  modalContainer2: {
+    backgroundColor: 'white',
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  pickerContainer: {
+    marginBottom: 8,
+  },
+  pickerLabel: {
+    paddingLeft: 4,
+    color: 'gray'
+
+  },
+  pickerIOS: {
+    height: 150,
+  },
+  pickerAndroid: {
+    height: 50,
+    width: '100%',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#999',
+    borderRadius: 6,
+    marginBottom: 8,
+    // ajusta padding si es necesario para que se vea bien
+    overflow: 'hidden', // importante para que el borde redondeado funcione
+  },
+
+  texto: {
+    fontFamily: 'FiraSans_400Regular',
+    fontSize: 18,
+  },
+  listModeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  assignedListTitle: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#217346',
+    borderRadius: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginLeft: 8,
+  },
+  exportObjetoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#192f6a',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginLeft: 8,
+    marginTop: 4,
+  },
+  importObjetoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e67e22',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginLeft: 6,
+    marginTop: 4,
+  },
+  exportButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  listModeButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 5,
+  },
+  listModeButtonActive: {
+    backgroundColor: '#192f6a',
+  },
+  listModeText: {
+    color: '#192f6a',
+    fontWeight: 'bold',
+  },
+  listModeTextActive: {
+    color: 'white',
+  },
+  objetoObraHeading: {
+    flex: 1,
+    color: '#192f6a',
+    fontSize: 16,
+    fontWeight: 'bold',
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  objetoObraHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 8,
+  },
+  swipeDeleteAction: {
+    backgroundColor: '#c62828',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 72,
+    marginVertical: 4,
+    borderRadius: 6,
+  },
+  deleteObjectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  deleteObjectButtonText: {
+    color: '#c62828',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  deleteLineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  assignedItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  assignedLineHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  assignedHierarchy: {
+    flex: 1,
+    flexShrink: 1,
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  assignedQuantity: {
+    color: '#192f6a',
+    fontWeight: 'bold',
+  },
+  assignedDescription: {
+    fontSize: 14,
+    fontFamily: 'FiraSans_400Regular',
+    fontWeight: 'bold',
+    marginTop: 3,
+  },
+  assignedPrice: {
+    fontSize: 16,
+    marginTop: 3,
+    paddingRight: 5
+  },
+  subetapa: {
+    fontSize: 12,
+    marginTop: 3,
+    paddingRight: 5
+  },
+  assignedNotes: {
+    fontSize: 12,
+    color: '#555',
+    marginTop: 3,
+  },
+  exportModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 20,
+  },
+  exportModalContainer: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 20,
+  },
+  exportModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#192f6a',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  exportModalMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  exportModalActions: {
+    gap: 10,
+  },
+  exportModalButton: {
+    alignItems: 'center',
+    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  exportSaveButton: {
+    backgroundColor: '#217346',
+  },
+  exportShareButton: {
+    backgroundColor: '#192f6a',
+  },
+  exportModalButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  exportModalCancel: {
+    alignItems: 'center',
+    marginTop: 14,
+    paddingVertical: 8,
+  },
+  exportModalCancelText: {
+    color: '#555555',
+    fontWeight: '600',
+  },
+  importModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 20,
+  },
+  importModalContainer: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 20,
+  },
+  importModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#e67e22',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  importModalMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  importModalActions: {
+    gap: 10,
+  },
+  importModalButton: {
+    alignItems: 'center',
+    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  importSaveButton: {
+    backgroundColor: '#e67e22',
+  },
+  importModalButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  importModalCancel: {
+    alignItems: 'center',
+    marginTop: 14,
+    paddingVertical: 8,
+  },
+  importModalCancelText: {
+    color: '#555555',
+    fontWeight: '600',
+  },
+  emptyAssignedList: {
+    textAlign: 'center',
     color: '#666',
+    padding: 20,
   },
 });
