@@ -44,6 +44,20 @@ export const establecerObjetodeobraActivo = (db, objetodeobra_id) => {
   );
 }
 
+//ETAPAS
+export const obtenerEtapas = (db) => {
+  return db.getAllAsync(
+    `SELECT subetapas.*
+    FROM subetapas 
+    ORDER BY subetapas.IDSubEtapa, subetapas.SubEtapa
+    ` );
+};
+
+export const activarEtapa = (db, IDSobreGrupo) => {
+  return db.getFirstAsync(
+    `SELECT subetapas.IDSubEtapa FROM subetapas WHERE IDSobreGrupo = ?`, [IDSobreGrupo]);
+};
+
 
 
 
@@ -628,6 +642,7 @@ export const obtenerObrasFiltradas = async (db, tablaId, limite = 50, offset = 0
 export const agregarRCalObra = async (
   db,
   obra_id,
+  IDSubEtapa,
   objetodeobra_id,
   IDRVariante,
   cantidad,
@@ -637,9 +652,9 @@ export const agregarRCalObra = async (
 ) => {
   return db.runAsync(
     `INSERT INTO listadodecantidades
-      (obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso
+      (obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa
   );
 }
 
@@ -648,6 +663,7 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
     `SELECT listadodecantidades.id AS asignacion_id,
             listadodecantidades.objetodeobra_id,
             listadodecantidades.IDRVariante,
+            listadodecantidades.IDSubEtapa,
             listadodecantidades.cantidad,
             listadodecantidades.precio,
             listadodecantidades.observaciones,
@@ -661,6 +677,7 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
             suministro_unidades.umedicion AS suministro_unidad,
             recursos.Precio AS suministro_precio,
             sobregrupos.SobreGrupo,
+            subetapas.SubEtapa,
             grupos.Grupo,
             subgrupos.SubGrupo
      FROM listadodecantidades
@@ -668,13 +685,14 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
      LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
      LEFT JOIN unidadesmedidas ON unidadesmedidas.um = rvariantes.UM
      LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
+     LEFT JOIN subetapas ON subetapas.IDSubEtapa = listadodecantidades.IDSubEtapa
      LEFT JOIN recursotipos ON recursotipos.idtiporecurso = recursos.Tipo
      LEFT JOIN unidadesmedidas AS suministro_unidades ON suministro_unidades.um = recursos.UM
      LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
      LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
      LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
      WHERE listadodecantidades.obra_id = ?
-     ORDER BY objetosdeobras.objetodeobra COLLATE NOCASE ASC,
+     ORDER BY 
               listadodecantidades.objetodeobra_id ASC,
               listadodecantidades.IDRVariante ASC,
               listadodecantidades.rowid ASC`,

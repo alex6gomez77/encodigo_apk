@@ -131,7 +131,7 @@ export default function HomeScreen() {
           resizeMode="contain"
         />       
         <Text style={styles.subtitleText}>
-          SISTEMA DE CÓDIGOS DEL PRECONS{'\n'} & CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}versión: 1.0.0 {'\n'}( Build 15102026 )
+          SISTEMA DE CÓDIGOS DEL PRECONS III{'\n'} CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}Versión: 1.0.0 {'\n'}( Build 13112026 )
         </Text>   
      
 

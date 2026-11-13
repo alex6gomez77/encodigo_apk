@@ -309,35 +309,32 @@ export default function PreliminaresScreen() {
         ['Obra', laObra.obra || ''],
         [],
         [
-          'Objeto de obra',
+          'Etapa',
           'Código',
-          'Descripción',
           'Suministro',
-          'Tipo de suministro',
+          'Descripción',
           'Cantidad',
-          'Unidad',
-          'Precio unitario',
-          'Costo total',
-          'Observaciones',
+          'Unidad Medida',
+          'Precio',
+          'CM',
+          'Importe Total',
         ],
         ...renglonesAsignados.map((renglon) => {
           const cantidad = Number(renglon.cantidad) || 0;
           const precio = Number(renglon.precio) || 0;
           return [
-            renglon.objetodeobra || 'Por defecto',
+            renglon.IDSUbEtapa || '',
             renglon.IDRVariante || '',
-            renglon.RVariante || '',
             renglon.suministro_nombre || '',
-            renglon.suministro_tipo || '',
+            renglon.RVariante || '',
             cantidad,
             renglon.suministro_unidad || renglon.umedicion || '',
             precio,
+            '1',
             cantidad * precio,
-            renglon.observaciones || '',
           ];
         }),
         [],
-        ['', '', '', '', '', '', '', 'Costo total de la obra', costoTotalObra],
       ];
       const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
         '<': '&lt;',
@@ -455,15 +452,20 @@ export default function PreliminaresScreen() {
         onBack={() => router.back()}
       />
        
-      <Text style={commonStyles.headerFiltro}>Obra: "{ laObra.obra }"
+      <Text style={styles.headerFiltro}>{laObra.obra ? laObra.obra.toUpperCase() : '' }
       </Text>
       
       <View style={styles.listModeContainer}>
           <View style={styles.assignedListTitle}>
             <Text style={styles.assignedPrice}>
-              Costo: ${costoTotalObra.toFixed(2)}
+              Costo:  ${costoTotalObra.toFixed(2)}
             </Text>
           </View>
+          <Link href="/Renglones" asChild>
+                      <Pressable style={{alignItems: 'center', marginRight: 10}}>
+                      <FontAwesome5 name="bars" size={20} color="#192f6a" />
+                      </Pressable>
+                    </Link>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Generar Excel del listado de cantidades"
@@ -471,7 +473,6 @@ export default function PreliminaresScreen() {
             style={styles.exportButton}
           >
             <FontAwesome5 name="file-excel" size={16} color="#ffffff" />
-            <Text style={styles.exportButtonText}>Excel</Text>
           </Pressable>
       </View>
       
@@ -518,7 +519,14 @@ export default function PreliminaresScreen() {
             )}
           >
             <View style={commonStyles.detallesItemContainer}>
-              <View style={styles.assignedLineHeader}>
+
+              <View style={{ flex: 1, flexDirection: 'row'}}>
+              <Text style={styles.subetapa}>
+                  Etapa: {item.IDSubEtapa || ''} {item.SubEtapa || ''}
+                </Text>              
+              </View>
+
+              <View style={styles.assignedLineHeader}>                
                 <Text style={commonStyles.campoCodigo}>{item.IDRVariante}</Text>
                 <Text
                   style={styles.assignedHierarchy}
@@ -550,7 +558,25 @@ export default function PreliminaresScreen() {
       ) }
       ListEmptyComponent={
        (
+        <View>
           <Text style={styles.emptyAssignedList}>Esta obra aún no tiene renglones asignados.</Text>
+          
+                    <Link href="/Renglones" asChild>
+                      <Pressable style={{alignItems: 'center'}}>
+                      <FontAwesome5 name="bars" size={30} color="#192f6a" />
+                      <Text 
+                        style={styles.cabecera}
+                        adjustsFontSizeToFit
+                        numberOfLines={1}
+                        minimumFontScale={0.6}
+                      >
+                          Ir a Renglones
+                        </Text>
+                       
+                      </Pressable>
+                    </Link>
+                    
+        </View>
         )
       }
       onEndReached={undefined}
@@ -966,6 +992,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginVertical: 6,
   },
+  gradienteResumenContainer: {
+    alignItems: 'center',
+    borderRadius: 5,
+    padding: 10,
+    width: '30%',
+    marginBottom: 10,
+    marginHorizontal: 2
+  },
   pickerWrapper: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -989,6 +1023,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'white',
     marginTop: 10
+  },
+  headerFiltro: {
+    color: '#192f6a',
+    marginLeft: 5,
+    paddingHorizontal: 10,
+    marginBottom: 0,
+    fontFamily: 'FiraSans_400Regular',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   logo: {
     width: 50,
@@ -1231,6 +1274,11 @@ const styles = StyleSheet.create({
   },
   assignedPrice: {
     fontSize: 16,
+    marginTop: 3,
+    paddingRight: 5
+  },
+  subetapa: {
+    fontSize: 12,
     marginTop: 3,
     paddingRight: 5
   },

@@ -165,7 +165,7 @@ export const commonStyles = StyleSheet.create({
         buttonObraFlotante: {
             width: 40,
             height: 40,
-            borderRadius: 20,
+            borderRadius: 5,
             alignItems: 'center',
             justifyContent: 'center',
             marginHorizontal: 3,
@@ -254,10 +254,11 @@ export const commonStyles = StyleSheet.create({
             marginBottom: 10,
         },
         detallesItemContainer: {
-            backgroundColor: '#ebf8fd',
+            backgroundColor: '#8bacfa21',
             borderRadius: 3,
             paddingHorizontal: 10,
             margin: 2,
+           // borderWidth: 1,
         },
 
         detallesItemPartidas: {
@@ -382,14 +383,14 @@ export const commonStyles = StyleSheet.create({
     right: 10,
     top: 0,
     backgroundColor: '#4b86b4',
-    borderEndEndRadius: 8,
-    borderBottomStartRadius: 8,
+    borderEndEndRadius: 5,
+    borderBottomStartRadius: 5,
     paddingHorizontal: 12,
     paddingVertical: 2,
     elevation: 2,
     minWidth: 100,
     alignItems: 'center',
-    height: 20,
+    height: 25,
   },
    etiquetaObraInactiva: {
     flexDirection: 'row',
@@ -400,8 +401,8 @@ export const commonStyles = StyleSheet.create({
     right: 10,
     top: 0,
     backgroundColor: '#fff',
-    borderEndEndRadius: 8,
-    borderBottomStartRadius: 8,
+    borderEndEndRadius: 5,
+    borderBottomStartRadius: 5,
     paddingHorizontal: 12,
     paddingVertical: 2,
     elevation: 2,
@@ -532,15 +533,15 @@ export const commonStyles = StyleSheet.create({
   },
 
   buttonAgregar: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
+    backgroundColor: '#4b86b4',
+    paddingVertical: 5,
     paddingHorizontal: 20,
-    borderRadius: 5,  // Borde redondeado de 5px
+    borderRadius: 3,  // Borde redondeado de 5px
     alignItems: 'center',
   },
   buttonCancelar: {
     backgroundColor: '#bf040d',
-    paddingVertical: 12,
+    paddingVertical: 5,
     paddingHorizontal: 20,
     borderRadius: 5,  // Borde redondeado de 5px
     alignItems: 'center',
@@ -548,7 +549,7 @@ export const commonStyles = StyleSheet.create({
   buttonTextAgregar: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
+   // fontWeight: 'bold',
   },
 
 });

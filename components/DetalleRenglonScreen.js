@@ -83,21 +83,31 @@ export default function DetalleRenglonScreen() {
         <>
           <ScrollView contentContainerStyle={styles.content}>
             <View style={styles.renglonInfo}>
-              <View style={styles.renglonHierarchy}>
-                <Text style={styles.renglonLevel}>
-                  Sección {renglon.IDSobreGrupo ?? '—'}: {renglon.SobreGrupo || 'Sin sección'}
-                </Text>
-                <Text style={styles.renglonLevel}>
-                  Capítulo {renglon.IDGrupo ?? '—'}: {renglon.Grupo || 'Sin capítulo'}
-                </Text>
-                <Text style={styles.renglonLevel}>
-                  Subcapítulo {renglon.IDSubGrupo ?? '—'}: {renglon.SubGrupo || 'Sin subcapítulo'}
-                </Text>
-              </View>
-              <View style={styles.renglonHeader}>
-                <Text style={commonStyles.campoCodigo}>{renglon.IDRVariante}</Text>
-                <Text style={styles.renglonName}>{renglon.RVariante}</Text>
-              </View>
+             
+
+              <View style={styles.renglonInfo}>
+              <Text style={styles.hierarchyText}>
+                {renglon?.IDSobreGrupo ?? '—'} {renglon?.SobreGrupo || 'Sin sección'}
+              </Text>
+              <Text style={styles.hierarchyText}>
+                {renglon?.IDGrupo ?? '—'} {renglon?.Grupo || 'Sin capítulo'}
+              </Text>
+              <Text style={styles.hierarchyText}>
+                {renglon?.IDSubGrupo ?? '—'} {renglon?.SubGrupo || 'Sin subcapítulo'}
+              </Text>
+               
+
+              <View style={styles.renglonTitle}>
+                              <Text style={[commonStyles.renglonName, {fontWeight: 'bold'}]} 
+                              numberOfLines={3} 
+                              ellipsizeMode="tail"
+                              >
+                                {renglon?.IDRVariante} <Text style={{fontWeight: '500'}}>{renglon?.RVariante}</Text>
+                              </Text>
+                            </View>          
+            </View>
+
+
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Precio</Text>
                 <Text style={styles.summaryValue}>
@@ -140,7 +150,22 @@ export default function DetalleRenglonScreen() {
             )}
 
             <View style={styles.supplySection}>
-              <Text style={styles.supplyTitle}>Suministro opcional</Text>
+              <View style={{flex: 1, flexDirection: 'row', justifyContent: 'space-between'}}>
+              <Text style={styles.supplyTitle}>Suministro</Text>
+              {selectedSuministro && (
+                <>                 
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Quitar suministro seleccionado"
+                    onPress={() => setSelectedSuministro(null)}
+                    style={styles.supplyRemoveButton}
+                  >
+                    <FontAwesome5 name="times-circle" size={14} color="#b42318" />
+                    <Text style={styles.supplyRemoveText}>Quitar suministro</Text>
+                  </Pressable>
+                </>
+              )}
+              </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={
@@ -166,15 +191,7 @@ export default function DetalleRenglonScreen() {
                   <Text style={styles.supplyDetails}>
                     {`Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} | Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)}`}
                   </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Quitar suministro seleccionado"
-                    onPress={() => setSelectedSuministro(null)}
-                    style={styles.supplyRemoveButton}
-                  >
-                    <FontAwesome5 name="times-circle" size={14} color="#b42318" />
-                    <Text style={styles.supplyRemoveText}>Quitar suministro</Text>
-                  </Pressable>
+                  
                 </>
               )}
             </View>
@@ -212,28 +229,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+    paddingVertical: 0,
+    marginBottom: 0,
   },
   renglonHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 8,
   },
-  renglonHierarchy: {
-    marginBottom: 6,
+  renglonTitleBlock: {
+    flex: 1,
+    flexShrink: 1,
   },
-  renglonLevel: {
+  renglonHierarchyInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  renglonHierarchyInlineFixed: {
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 18,
+    flexShrink: 0,
+  },
+  renglonHierarchyInlineCap: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     color: '#555',
     fontSize: 12,
     lineHeight: 18,
   },
   renglonName: {
-    flex: 1,
     flexShrink: 1,
     fontSize: 16,
     fontWeight: 'bold',
     color: '#192f6a',
-    marginTop: 6,
+    marginTop: 2,
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -306,7 +337,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    marginTop: 8,
+    marginBottom: 6,
     paddingVertical: 4,
   },
   supplyRemoveText: {
@@ -317,6 +348,7 @@ const styles = StyleSheet.create({
   resourceType: {
     fontSize: 12,
     fontWeight: 'bold',
+    color: '#192f6a',
   },
   resourceName: {
     fontSize: 14,
@@ -326,6 +358,21 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 14,
     lineHeight: 18,
+  },
+  renglonTitle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 0,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  renglonName: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#192f6a',
   },
   message: {
     padding: 20,

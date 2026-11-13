@@ -15,6 +15,8 @@ import {
   obtenerObjetosdeobras,
   obtenerObraActiva,
   obtenerObras,
+  obtenerEtapas,
+  activarEtapa
 } from '../db/database';
 
 export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
@@ -26,6 +28,8 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
   const [obraNombre, setObraNombre] = useState('');
   const [objetosDeObra, setObjetosDeObra] = useState([]);
   const [objetoDeObraId, setObjetoDeObraId] = useState(null);
+  const [etapas, setEtapas] = useState([]);
+  const [etapaId, setEtapaId] = useState(null)
   const [cantidad, setCantidad] = useState('1');
   const [irAPreliminares, setIrAPreliminares] = useState(false);
   const datosCargadosRef = useRef(false);
@@ -44,11 +48,13 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
   const cargarDatosObra = useCallback(async () => {
     if (datosCargadosRef.current) return;
     try {
-      const [obrasCargadas, obraActiva, objetoActivo, objetosCargados] = await Promise.all([
+      const [obrasCargadas, obraActiva, objetoActivo, objetosCargados, etapasCargadas, etapaActiva] = await Promise.all([
         obtenerObras(db),
         obtenerObraActiva(db),
         obtenerObjetodeobraActivo(db),
         obtenerObjetosdeobras(db),
+        obtenerEtapas(db),
+        activarEtapa(db, renglon.IDSobreGrupo) 
       ]);
       if (!Array.isArray(objetosCargados)) {
         throw new Error('La consulta de objetos de obra no devolvió una lista válida.');
@@ -58,9 +64,11 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
       setObraId(obraActiva?.id ?? null);
       setObraNombre(obraActiva?.obra ?? '');
       setObjetosDeObra(objetosCargados);
+      setEtapas(etapasCargadas);
       setObjetoDeObraId(
         objetoActivo?.objetodeobra_activo ?? objetosCargados[0]?.id ?? null
       );
+      setEtapaId(etapaActiva.IDSubEtapa);
       datosCargadosRef.current = true;
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
@@ -80,6 +88,16 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
       Alert.alert('Error', `No se pudo actualizar el objeto de obra. ${mensaje}`);
+    }
+  };
+
+  const actualizarEtapa = async value => {
+    try {
+     // await establecerObjetodeobraActivo(db, value);
+      setEtapaId(value);
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', `No se pudo actualizar la Etapa. ${mensaje}`);
     }
   };
 
@@ -111,6 +129,7 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
       await agregarRCalObra(
         db,
         obraId,
+        etapaId,
         objetoDeObraId,
         renglon.IDRVariante,
         cantidadNumerica,
@@ -154,7 +173,7 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
               <FontAwesome5 style={styles.backIcon} name="arrow-left" size={20} color="#192f6a" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text>AGREGANDO RENGLÓN CONSTRUCTIVO AL OBRA</Text>
+              <Text>AGREGANDO RENGLÓN A LA OBRA</Text>
               {!!obraId && <Text style={styles.headerText}>{obraNombre}</Text>}
             </View>
           </View>
@@ -162,17 +181,21 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
             <View style={styles.renglonInfo}>
               <Text style={styles.hierarchyText}>
-                Sección {renglon?.IDSobreGrupo ?? '—'}: {renglon?.SobreGrupo || 'Sin sección'}
+                 {renglon?.IDSobreGrupo ?? '—'} {renglon?.SobreGrupo || 'Sin sección'}
               </Text>
               <Text style={styles.hierarchyText}>
-                Capítulo {renglon?.IDGrupo ?? '—'}: {renglon?.Grupo || 'Sin capítulo'}
+                 {renglon?.IDGrupo ?? '—'} {renglon?.Grupo || 'Sin capítulo'}
               </Text>
               <Text style={styles.hierarchyText}>
-                Subcapítulo {renglon?.IDSubGrupo ?? '—'}: {renglon?.SubGrupo || 'Sin subcapítulo'}
+                 {renglon?.IDSubGrupo ?? '—'} {renglon?.SubGrupo || 'Sin subcapítulo'}
               </Text>
               <View style={styles.renglonTitle}>
-                <Text style={commonStyles.campoCodigo}>{renglon?.IDRVariante}</Text>
-                <Text style={styles.renglonName}>{renglon?.RVariante}</Text>
+                <Text style={[commonStyles.renglonName, {fontWeight: 'bold'}]} 
+                numberOfLines={3} 
+                ellipsizeMode="tail"
+                >
+                  {renglon?.IDRVariante} <Text style={{fontWeight: '500'}}>{renglon?.RVariante}</Text>
+                </Text>
               </View>
               <Text style={styles.renglonPrice}>
                 Precio: ${Number(renglon?.Precio ?? 0).toFixed(2)} x {renglon?.umedicion || '—'}
@@ -180,25 +203,48 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
             </View>
 
             <View style={styles.formSection}>
-              <Text style={styles.label}>Suministro opcional seleccionado en detalles</Text>
-              {selectedSuministro ? (
-                <View style={styles.supplyRow}>
-                  <Text style={[styles.supplyDetails, styles.supplyDetailsFlex]}>
-                    {`${selectedSuministro.Recurso} | Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} | Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)}`}
-                  </Text>
+              {selectedSuministro && (
+                <>
+                <View style={{flex: 1, flexDirection: 'row', justifyContent: 'space-between'}}>
+                  <Text style={styles.label}>Suministro</Text>
                   <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Quitar suministro seleccionado"
-                    onPress={() => setSelectedSuministro(null)}
-                    style={styles.supplyRemoveIconButton}
-                    hitSlop={8}
-                  >
-                    <FontAwesome5 name="times-circle" size={18} color="#b42318" />
-                  </Pressable>
-                </View>
-              ) : (
-                <Text style={styles.supplyDetails}>Ninguno seleccionado</Text>
+                      accessibilityRole="button"
+                      accessibilityLabel="Quitar suministro seleccionado"
+                      onPress={() => setSelectedSuministro(null)}
+                      style={styles.supplyRemoveIconButton}
+                      hitSlop={8}
+                    >
+                      <FontAwesome5 name="times-circle" size={12} color="#b42318" /> 
+                      <Text style={styles.supplyRemoveText}>Quitar</Text>
+                    </Pressable>
+                    </View>
+                  <View style={styles.supplyRow}>
+                    <Text style={[styles.supplyDetails, styles.supplyDetailsFlex]}>
+                      {`${selectedSuministro.Recurso} | Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} | Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)}`}
+                    </Text>
+                    
+                  </View>
+                </>
               )}
+
+              <Text style={styles.label}>Etapa</Text>
+              <View style={styles.pickerWrapper}>
+                <Picker
+                  selectedValue={etapaId}
+                  onValueChange={actualizarEtapa}
+                >
+                  {etapas.length === 0 ? (
+                    <Picker.Item label="No hay etapas disponibles" value={null} enabled={false} />
+                  ) : etapas.map(objeto => (
+                    <Picker.Item
+                      key={objeto.IDSubEtapa}
+                      label={objeto.IDSubEtapa + " " + objeto.SubEtapa}
+                      value={objeto.IDSubEtapa}
+                      style={styles.pickerItem}
+                    />
+                  ))}
+                </Picker>
+              </View>
 
               <Text style={styles.label}>Objeto de Obra</Text>
               <View style={styles.pickerWrapper}>
@@ -233,7 +279,7 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
               </View>
 
               <View style={styles.quantityTotalFloat}>
-                <Text style={styles.quantityTotalLabel}>Precio total según cantidad</Text>
+                <Text style={styles.quantityTotalLabel}>Precio según Cantidad</Text>
                 <Text style={styles.quantityTotalAmount}>${precioTotal.toFixed(2)}</Text>
               </View>
 
@@ -242,16 +288,16 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
                   value={irAPreliminares}
                   onValueChange={setIrAPreliminares}
                   color={irAPreliminares ? '#192f6a' : undefined}
-                  accessibilityLabel="Ir a Preliminares después de agregar"
+                  accessibilityLabel="Ir a Preliminares"
                 />
                 <Pressable onPress={() => setIrAPreliminares(value => !value)}>
-                  <Text style={styles.checkboxLabel}>Ir a Preliminares después de agregar</Text>
+                  <Text style={styles.checkboxLabel}>Ir a Preliminares</Text>
                 </Pressable>
               </View>
 
               <View style={commonStyles.buttonsRow}>
                 <TouchableOpacity style={commonStyles.buttonAgregar} onPress={agregar}>
-                  <Text style={commonStyles.buttonTextAgregar}>AGREGAR</Text>
+                  <Text style={commonStyles.buttonTextAgregar}>Agregar</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -297,7 +343,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 5,
     paddingHorizontal: 10,
-    marginVertical: 5,
+    marginVertical: 0,
   },
   hierarchyText: {
     color: '#555',
@@ -307,8 +353,9 @@ const styles = StyleSheet.create({
   renglonTitle: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    flexShrink: 1,
     gap: 8,
-    marginTop: 4,
+    marginTop: 0,
   },
   renglonName: {
     flex: 1,
@@ -318,8 +365,8 @@ const styles = StyleSheet.create({
     color: '#192f6a',
   },
   renglonPrice: {
-    marginTop: 4,
-    fontSize: 16,
+    marginTop: 0,
+    fontSize: 12,
   },
   formSection: {
     paddingHorizontal: 5,
@@ -327,7 +374,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     marginTop: 10,
-    marginBottom: 4,
+    marginBottom: 1,
   },
   supplyRow: {
     flexDirection: 'row',
@@ -344,8 +391,22 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 0,
   },
+  supplyRemoveIconButtonxxx: {
+    marginTop: 11,
+    marginBottom: 1,
+  },
   supplyRemoveIconButton: {
-    paddingTop: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+     marginTop: 11,
+    marginBottom: 1,
+  },
+  supplyRemoveText: {
+    color: '#b42318',
+    fontSize: 10,
+    fontWeight: '600',
   },
   pickerWrapper: {
     borderWidth: 1,
@@ -359,7 +420,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: '#ccc',
     borderRadius: 6,
     marginBottom: 8,
     paddingHorizontal: 8,
@@ -408,7 +469,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   quantityTotalAmount: {
-    color: '#217346',
+    color: '#192f6a',
     fontSize: 20,
     fontWeight: 'bold',
   },

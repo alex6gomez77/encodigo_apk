@@ -249,8 +249,6 @@ export default function ObrasScreen() {
     codigo: '',
     cliente_id: '',
     obra: '',
-    identidad: 'obra',
-    cantidadfisica: '1',
     p100utilidades: '15',
     p100impuestos: '10',
     p100vacaciones: '9.09',
@@ -258,8 +256,7 @@ export default function ObrasScreen() {
     p100gastos: '1',
     p100impuestosft: '5',
     p100osde: '',
-    contribucionespecial: '',
-    argumentacion: '',
+    observaciones: '',
   };
 
   const [formData, setFormData] = useState(defaultForm);
@@ -314,9 +311,11 @@ export default function ObrasScreen() {
   };
 
   async function handleGuardarObra() {
+    Alert.alert('Éxito', 'Obra actualizada correctamente.');
     const codigo = formData.codigo.trim();
     const nombre = formData.obra.trim();
     const clienteId = Number(formData.cliente_id);
+    console.log('Los valores: ', codigo, nombre, clienteId);
     if (!codigo || !nombre || !Number.isInteger(clienteId) || clienteId <= 0) {
       Alert.alert('Validación', 'Debe completar Código, Obra y Cliente');
       return;
@@ -331,7 +330,7 @@ export default function ObrasScreen() {
       }
       return numero;
     };
-    const cantidad = leerNumero(formData.cantidadfisica, 'Cantidad', 1);
+    
     const utilidades = leerNumero(formData.p100utilidades, 'Porcentaje Utilidades');
     const impuestos = leerNumero(formData.p100impuestos, 'Porcentaje Impuestos');
     const vacaciones = leerNumero(formData.p100vacaciones, 'Porcentaje Vacaciones');
@@ -339,9 +338,7 @@ export default function ObrasScreen() {
     const gastos = leerNumero(formData.p100gastos, 'Porcentaje Gastos');
     const impuestosFt = leerNumero(formData.p100impuestosft, 'Porcentaje Impuestos FT');
     const osde = leerNumero(formData.p100osde, 'Porcentaje OSDE');
-    const contribucionEspecial = leerNumero(formData.contribucionespecial, 'Contribución Especial');
     const valoresNumericos = [
-      cantidad,
       utilidades,
       impuestos,
       vacaciones,
@@ -349,39 +346,22 @@ export default function ObrasScreen() {
       gastos,
       impuestosFt,
       osde,
-      contribucionEspecial,
     ];
     if (valoresNumericos.some((valor) => valor === null)) return;
-    if (cantidad <= 0) {
-      Alert.alert('Validación', 'La cantidad debe ser mayor que cero.');
-      return;
-    }
+    
 
     try {
       const parametros = [
         codigo,
         nombre,
         clienteId,
-        formData.identidad,
-        cantidad,
-        utilidades,
-        impuestos,
-        vacaciones,
-        contribuciones,
-        gastos,
-        impuestosFt,
-        osde,
-        contribucionEspecial,
-        formData.argumentacion.trim(),
+        formData.observaciones.trim(),
       ];
-
+ 
       if (editarId != null) {
         await db.runAsync(
           `UPDATE obras SET
-             codigo = ?, obra = ?, cliente_id = ?, identidad = ?, cantidadfisica = ?,
-             p100utilidades = ?, p100impuestos = ?, p100vacaciones = ?, p100contribuciones = ?,
-             p100gastos = ?, p100impuestosft = ?, p100osde = ?, contribucionespecial = ?,
-             argumentacion = ?
+             codigo = ?, obra = ?, cliente_id = ?,descripcion = ?
            WHERE id = ?`,
           ...parametros,
           editarId
@@ -392,10 +372,10 @@ export default function ObrasScreen() {
         await db.withTransactionAsync(async () => {
           const result = await db.runAsync(
             `INSERT INTO obras
-              (codigo, obra, cliente_id, identidad, cantidadfisica, p100utilidades, p100impuestos,
+              (codigo, obra, cliente_id, identidad,  p100utilidades, p100impuestos,
                p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, p100osde,
-               contribucionespecial, argumentacion)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                observaciones)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             ...parametros
           );
           obraId = result.lastInsertRowId;
@@ -423,16 +403,16 @@ export default function ObrasScreen() {
             const importe = subpartida.id === 39 && contribucionEspecial > 0
               ? contribucionEspecial
               : null;
-            const argumentacion = importe == null ? null : formData.argumentacion.trim();
+            const observaciones = importe == null ? null : formData.observaciones.trim();
             await db.runAsync(
               `INSERT INTO obrasubpartidas
-                (obra_id, plantilla_id, coeficiente, importe, argumentacion)
+                (obra_id, plantilla_id, coeficiente, importe, observaciones)
                VALUES (?, ?, ?, ?, ?)`,
               obraId,
               subpartida.id,
               subpartida.coeficiente,
               importe,
-              argumentacion
+              observaciones
             );
           }
         });
@@ -455,19 +435,14 @@ export default function ObrasScreen() {
       codigo: obra.codigo ?? '',
       obra: obra.obra ?? '',
       cliente_id: obra.cliente_id == null ? '' : String(obra.cliente_id),
-      identidad: obra.identidad ?? 'obra',
-      cantidadfisica: String(obra.cantidadfisica ?? 1),
       p100utilidades: String(obra.p100utilidades ?? 15),
       p100impuestos: String(obra.p100impuestos ?? 10),
       p100vacaciones: String(obra.p100vacaciones ?? 9.09),
       p100contribuciones: String(obra.p100contribuciones ?? 14),
       p100gastos: String(obra.p100gastos ?? 1),
       p100impuestosft: String(obra.p100impuestosft ?? 5),
-      p100osde: obra.p100osde == null ? '' : String(obra.p100osde),
-      contribucionespecial: obra.contribucionespecial == null
-        ? ''
-        : String(obra.contribucionespecial),
-      argumentacion: obra.argumentacion ?? '',
+      p100osde: obra.p100osde == null ? '' : String(obra.p100osde),      
+      observaciones: obra.observaciones ?? '',
     });
     setEditarId(obra.id);
     setModalVisible(true);
@@ -742,17 +717,16 @@ export default function ObrasScreen() {
         ref1: 'n/d',
         empresa1: cliente,
         organismo1: organismo,
-        cantidadfisica: obraData.cantidadfisica ? obraData.cantidadfisica.toFixed(2) : '1',
         preciofinal: obraData.precio 
-        ? Math.ceil(obraData.precio * obraData.cantidadfisica).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(',', '.') 
+        ? Math.ceil(obraData.precio ).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(',', '.') 
         : '0.00',
 
         preciofinal: obra.precio 
         ? ( identidad.toUpperCase() === 'OBRA' 
-            ? Math.ceil(obra.precio * obra.cantidadfisica)
+            ? Math.ceil(obra.precio )
                 .toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 .replace(',', '.')
-            : Math.ceil(obra.precio / obra.cantidadfisica)
+            : Math.ceil(obra.precio)
                 .toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 .replace(',', '.')
         ) 
@@ -960,7 +934,6 @@ export default function ObrasScreen() {
           originalObra.elaboradopor_id || null,
           originalObra.aprobadopor_id || null,
           originalObra.identidad || 'obra',
-          originalObra.cantidadfisica || 1,
           originalObra.p100utilidades || 0,
           originalObra.p100impuestos || 0,
           originalObra.p100vacaciones || 0,
@@ -973,8 +946,8 @@ export default function ObrasScreen() {
         ];
         const newObra = await db.runAsync(`
                 INSERT INTO obras
-                (codigo, obra, elaboradopor_id, aprobadopor_id, identidad, cantidadfisica, p100utilidades, p100impuestos, p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, precio, actividadtipo_id, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
+                (codigo, obra, elaboradopor_id, aprobadopor_id, identidad, p100utilidades, p100impuestos, p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, precio, actividadtipo_id, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
                 `, params);
         // Obtener el ID de la nueva obra creada
         const newObra_id = newObra.lastInsertRowId;
@@ -987,7 +960,7 @@ export default function ObrasScreen() {
         // Duplicar las subpartidas
         const obrasubpartidas = await db.getAllAsync('SELECT * FROM obrasubpartidas WHERE obra_id = ?', [obra_id]);
         for (const subpartida of obrasubpartidas) {
-            await db.runAsync('INSERT INTO obrasubpartidas (obra_id, plantilla_id, costobase, importe, salarios, coeficiente, argumentacion) VALUES (?, ?, ?, ?, ?, ?, ?)', [newObra_id, subpartida.plantilla_id, subpartida.costobase, subpartida.importe, subpartida.salarios, subpartida.coeficiente, subpartida.argumentacion]);
+            await db.runAsync('INSERT INTO obrasubpartidas (obra_id, plantilla_id, costobase, importe, salarios, coeficiente, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?)', [newObra_id, subpartida.plantilla_id, subpartida.costobase, subpartida.importe, subpartida.salarios, subpartida.coeficiente, subpartida.observaciones]);
         }
         // Duplicar los recursos humanos
         const obrarhumanos = await db.getAllAsync('SELECT * FROM obrarhumanos WHERE obra_id = ?', [obra_id]);
@@ -1494,20 +1467,25 @@ export default function ObrasScreen() {
             )}
           >
             <View style={commonStyles.detallesItemContainer}>            
-            <Text style={{ fontSize: 10, paddingTop: 4}}>
-               {obra.codigo || "S/C"} 
+            <Text style={{ fontSize: 12, paddingTop: 4}}>
+               {obra.codigo || ""} 
             </Text>
             <Link href={{ pathname: '/Preliminares', params: { obraId: String(obra.id) } }} asChild >
               <TouchableOpacity>
-                <Text style={{ color: '#192f6a',  fontSize: 16, fontWeight: '800', paddingTop: 8}} >{obra.obra}</Text> 
+                <Text style={{ color: '#192f6a',  fontSize: 14, fontWeight: '800', paddingTop: 8}} >{obra.obra.toUpperCase()}</Text> 
               </TouchableOpacity>
             </Link>   
-            <Text style={{fontSize: 16}}>Cliente: {obra.cliente}</Text>
+            <Text style={{fontSize: 12, flex: 1, flexShrink: 1}} 
+                numberOfLines={1} 
+                ellipsizeMode="tail"
+              >
+                Cliente: {obra.cliente}
+              </Text>
 
             <View style={{ flexDirection: 'row',  gap: 2, marginTop: 4, marginBottom: 2 }}>
               <View style={{ alignItems: 'center', flex: 1, minWidth: 60 }}>
-                <Text style={{ fontSize: 14, color: '#666' }}>Precio total</Text>
-                <Text style={{ fontSize: 14 }}>  ${Number(obra.precio_asignado ?? 0).toFixed(2)}</Text>
+                <Text style={{ fontSize: 14, color: '#666' }}>Precio</Text>
+                <Text style={{ fontSize: 14, fontWeight: 'bold' }}>  ${Number(obra.precio_asignado ?? 0).toFixed(2)}</Text>
               </View>
                <View style={{ alignItems: 'center', flex: 1, minWidth: 60  }}>
                 <Text style={{ fontSize: 14, color: '#666' }}>Objetos de Obra</Text>
@@ -1562,7 +1540,7 @@ export default function ObrasScreen() {
                 ]}
                 disabled={isPremiumDisabled()}
               >
-                <FontAwesome5 name="file-word" size={20} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
+                <FontAwesome5 name="file-excel" size={20} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
               </TouchableOpacity>
               </View>
             </View>
@@ -1743,26 +1721,8 @@ export default function ObrasScreen() {
               ))}
             </Picker>          
           </View>
-
-          <Text style={styles.label}>Tipo</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={formData.identidad}
-              onValueChange={value => handleChange('identidad', value)}
-            >
-              <Picker.Item label="Producto" value="producto" />
-              <Picker.Item label="Obra" value="obra" />
-            </Picker>
-          </View>
-
-          <Text style={styles.label}>Cantidad</Text>
-          <TextInput
-            style={styles.input}
-            keyboardType="numeric"
-            value={formData.cantidadfisica}
-            onChangeText={text => handleChange('cantidadfisica', text)}
-          />
-
+          
+          
           {/* Campos porcentuales y otros */}
 
           <Text style={styles.label}>Porcentaje Utilidades (%)</Text>
@@ -1821,30 +1781,23 @@ export default function ObrasScreen() {
             onChangeText={text => handleChange('p100osde', text)}
           />
 
-          <Text style={styles.label}>Contribución Especial</Text>
-          <TextInput
-            style={styles.input}
-            keyboardType="numeric"
-            value={formData.contribucionespecial}
-            onChangeText={text => handleChange('contribucionespecial', text)}
-          />
-
-          <Text style={styles.label}>Argumentación</Text>
+          
+          <Text style={styles.label}>Observaciones</Text>
           <TextInput
             style={[styles.input, {height: 80}]}
             multiline
-            value={formData.argumentacion}
-            onChangeText={text => handleChange('argumentacion', text)}
+            value={formData.observaciones}
+            onChangeText={text => handleChange('observaciones', text)}
           />
 
           
         </ScrollView>
         <View style={styles.buttonsRow}> 
           <TouchableOpacity style={commonStyles.buttonAgregar} onPress={handleGuardarObra} >
-                <Text style={commonStyles.buttonTextAgregar}>{editarId ? "GUARDAR" : "AGREGAR"}</Text>
+                <Text style={commonStyles.buttonTextAgregar}>{editarId ? "Guardar" : "Agregar"}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={commonStyles.buttonCancelar} onPress={cancelarFormulario} >
-                <Text style={commonStyles.buttonTextAgregar}>CANCELAR</Text>
+                <Text style={commonStyles.buttonTextAgregar}>Cancelar</Text>
               </TouchableOpacity>
         </View>
       </Modal>
@@ -1895,7 +1848,7 @@ const styles = StyleSheet.create({
   obraItem: { padding: 12, borderBottomWidth: 1, borderColor: '#ccc' },
   obraCodigo: { fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
 
-  modalContainer: { padding: 20, backgroundColor: '#f9f9f9' },
+  modalContainer: { paddingHorizontal: 20, backgroundColor: '#f9f9f9', marginBottom: 12 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
   modalFiltroOverlay: {
     flex: 1,
@@ -1935,13 +1888,13 @@ const styles = StyleSheet.create({
   label: { fontWeight: '600', marginTop: 12 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 8, marginTop: 4, backgroundColor: '#fff' },
   pickerWrapper: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 4, backgroundColor: '#fff' },
-  buttonsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30, margin: 16 },
+  buttonsRow: { flexDirection: 'row', justifyContent: 'space-between',  marginHorizontal: 16, marginBottom: 16 },
   botonesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    paddingRight: 5,
-    gap: 10,
+    paddingRight: 2,
+    gap: 2,
     marginVertical: 10,
   },
 
@@ -1965,8 +1918,16 @@ const styles = StyleSheet.create({
   },
   activateWorkButtonText: {
     color: '#192f6a',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
+  },
+  swipeDeleteAction: {
+    backgroundColor: '#c62828',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 72,
+    marginVertical: 4,
+    borderRadius: 6,
   },
 
   alertOverlay: {

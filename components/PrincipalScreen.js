@@ -83,7 +83,7 @@ export default function PrincipalScreen() {
           >
           <Link href="/Obras" asChild>
             <Pressable style={{alignItems: 'center'}}>
-            <FontAwesome5 name="concierge-bell" size={30} color="#192f6a" />
+            <FontAwesome5 name="building" size={30} color="#192f6a" />
             <Text 
               style={styles.cabecera}
               adjustsFontSizeToFit
