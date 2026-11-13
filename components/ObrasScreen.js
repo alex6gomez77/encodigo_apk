@@ -23,7 +23,7 @@ import CryptoJS from 'crypto-js';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { Buffer } from 'buffer';
-import { actualizarFiltro, contarObrasFiltradas, eliminarFiltro, establecerObraActiva, obtenerObrasFiltradas } from '../db/database';
+import { actualizarFiltro, contarObrasFiltradas, eliminarFiltro, establecerObraActiva, obtenerObras, obtenerObrasFiltradas, obtenerRenglonesAsignados } from '../db/database';
 global.Buffer = global.Buffer || Buffer;
 
 
@@ -54,6 +54,9 @@ export default function ObrasScreen() {
   const [filtroVisible, setFiltroVisible] = useState(false);
   const filtroRef = useRef(null);
   const cargandoRef = useRef(false);
+  const [exportando, setExportando] = useState(false);
+  const [exportacionMensaje, setExportacionMensaje] = useState('');
+  const [exportacionError, setExportacionError] = useState('');
 
   const cargarInicial = useCallback(async (estaActiva = () => true) => {
     try {
@@ -917,6 +920,135 @@ export default function ObrasScreen() {
     }
   };
 
+  const exportarCantidadesObra = async (obra) => {
+    setExportando(true);
+    setExportacionMensaje('');
+    setExportacionError('');
+
+    try {
+      const asignados = await obtenerRenglonesAsignados(db, obra.id);
+      if (!asignados || asignados.length === 0) {
+        setExportacionError(`La obra "${obra.obra}" no tiene renglones asignados para exportar.`);
+        setExportando(false);
+        return;
+      }
+
+      const datos = [
+        ['LISTADO DE CANTIDADES'],
+        ['Obra', obra.obra || ''],
+        ['Código', obra.codigo || ''],
+        ['Cliente', obra.cliente || ''],
+        [],
+        [
+          'Objeto de obra',
+          'Etapa',
+          'Código RC',
+          'Suministro',
+          'Descripción',
+          'Cantidad',
+          'Unidad Medida',
+          'Precio',
+          'CM',
+          'Importe Total',
+        ],
+      ];
+
+      let totalObra = 0;
+
+      for (const renglon of asignados) {
+        const cantidad = Number(renglon.cantidad) || 0;
+        const precio = Number(renglon.precio) || 0;
+        const importe = cantidad * precio;
+        totalObra += importe;
+        datos.push([
+          renglon.objetodeobra || '',
+          renglon.IDSUbEtapa || '',
+          renglon.IDRVariante || '',
+          renglon.suministro_nombre || '',
+          renglon.RVariante || '',
+          cantidad,
+          renglon.suministro_unidad || renglon.umedicion || '',
+          precio,
+          '1',
+          importe,
+        ]);
+      }
+
+      datos.push([]);
+      datos.push(['TOTAL', '', '', '', '', '', '', '', '', totalObra.toFixed(2)]);
+
+      const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&apos;',
+        '"': '&quot;',
+      })[caracter]);
+      const filasXml = datos.map((fila, indiceFila) => {
+        const celdasXml = fila.map((valor, indiceColumna) => {
+          const referencia = `${String.fromCharCode(65 + indiceColumna)}${indiceFila + 1}`;
+          if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return `<c r="${referencia}"><v>${valor}</v></c>`;
+          }
+          return `<c r="${referencia}" t="inlineStr"><is><t xml:space="preserve">${escaparXml(valor ?? '')}</t></is></c>`;
+        }).join('');
+        return `<row r="${indiceFila + 1}">${celdasXml}</row>`;
+      }).join('');
+
+      const zip = new PizZip();
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml" ContentType="application/xml"/>'
+        + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        + '</Types>');
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<sheets><sheet name="Cantidades de obra" sheetId="1" r:id="rId1"/></sheets>'
+        + '</workbook>');
+      zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + `<sheetData>${filasXml}</sheetData></worksheet>`);
+      const contenido = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const fecha = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = `Cantidades_${(obra.codigo || 'obra').replace(/[^a-zA-Z0-9]/g, '_')}_${fecha}.xlsx`;
+      const tipoArchivo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      const directorioCache = FileSystem.cacheDirectory;
+      if (!directorioCache) {
+        throw new Error('No está disponible la carpeta temporal para crear el archivo.');
+      }
+      const uri = `${directorioCache}${nombreArchivo}`;
+      await FileSystem.writeAsStringAsync(uri, contenido, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('No hay una aplicación disponible para compartir o guardar el archivo.');
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: tipoArchivo,
+        dialogTitle: `Exportar cantidades de ${obra.obra}`,
+        UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      });
+      setExportacionMensaje(`Se abrió el menú para compartir el Excel de ${obra.obra}.`);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      setExportacionError(`No se pudo generar el Excel. ${detalle}`);
+    } finally {
+      setExportando(false);
+    }
+  };
+
   const handleDuplicarObra = async(obra, nuevoCodigo, nuevoObra) => {
     try {
         const obra_id = obra.id;
@@ -1504,44 +1636,45 @@ export default function ObrasScreen() {
             
               <View style={styles.botonesContainer}>
                 <TouchableOpacity onPress={() => handleSaveObra(obra)} style={[commonStyles.buttonObraFlotante, {backgroundColor: "#ffffff"}]}>
-                <FontAwesome5 name="save" size={20} color="#4c669f" />
-              </TouchableOpacity>
+                  <FontAwesome5 name="save" size={20} color="#4c669f" />
+                </TouchableOpacity>
 
-              <TouchableOpacity 
-                onPress={() => handleEditarObra(obra)} 
-                style={[
-                  commonStyles.buttonObraFlotante, 
-                  {backgroundColor: "#ffffff"}, 
-                  isPremiumDisabled() && { opacity: 0.3 }
-                ]}
-                disabled={isPremiumDisabled()}
-              >
-                <FontAwesome5 name="edit" size={18} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
-              </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => handleEditarObra(obra)} 
+                  style={[
+                    commonStyles.buttonObraFlotante, 
+                    {backgroundColor: "#ffffff"}, 
+                    isPremiumDisabled() && { opacity: 0.3 }
+                  ]}
+                  disabled={isPremiumDisabled()}
+                >
+                  <FontAwesome5 name="edit" size={20} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
+                </TouchableOpacity>
 
+                <TouchableOpacity
+                  onPress={() => { setObraADuplicar(obra); setDuplicarFormData({ codigo: obra.codigo + '-Copia', obra: obra.obra + '-Copia' }); setDuplicarModalVisible(true); }}
+                  style={[
+                    commonStyles.buttonObraFlotante,
+                    {backgroundColor: "#ffffff"},
+                    (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }
+                  ]}
+                  disabled={lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled()}
+                >
+                  <FontAwesome5 name="plus" size={20} color={lalicencia?.licenseKey === 'TRIAL' ||  isPremiumDisabled() ? '#999' : '#4c669f'} />
+                </TouchableOpacity>
+               
 
-              <TouchableOpacity
-                onPress={() => { setObraADuplicar(obra); setDuplicarFormData({ codigo: obra.codigo + '-Copia', obra: obra.obra + '-Copia' }); setDuplicarModalVisible(true); }}
-                style={[
-                  commonStyles.buttonObraFlotante,
-                  {backgroundColor: "#ffffff"},
-                  (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }
-                ]}
-                disabled={lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled()}
-              >
-                <FontAwesome5 name="plus" size={18} color={lalicencia?.licenseKey === 'TRIAL' ||  isPremiumDisabled() ? '#999' : '#4c669f'} />
-              </TouchableOpacity>
-                {/* ax6 */}
-              <TouchableOpacity onPress={() => handleExportarObraWORD(obra)} 
-                style={[
-                  commonStyles.buttonObraFlotante, 
-                  {backgroundColor: "#ffffff"}, 
-                  isPremiumDisabled() && { opacity: 0.3 }
-                ]}
-                disabled={isPremiumDisabled()}
-              >
-                <FontAwesome5 name="file-excel" size={20} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => exportarCantidadesObra(obra)}
+                  style={[
+                    commonStyles.buttonObraFlotante, 
+                    {backgroundColor: "#ffffff"}, 
+                    exportando && { opacity: 0.5 }
+                  ]}
+                  disabled={exportando}
+                >
+                  <FontAwesome5 name="file-csv" size={20} color={exportando ? '#999' : '#217346'} />
+                </TouchableOpacity>
               </View>
             </View>
            

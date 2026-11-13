@@ -54,6 +54,7 @@ export default function PreliminaresScreen() {
   const [exportando, setExportando] = useState(false);
   const [exportacionMensaje, setExportacionMensaje] = useState('');
   const [exportacionError, setExportacionError] = useState('');
+  const [objetoExportando, setObjetoExportando] = useState(null);
   const [filtroVisible, setFiltroVisible] = useState(false);
   const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
   const [detallesRenglon, setDetallesRenglon] = useState(null);
@@ -431,6 +432,134 @@ export default function PreliminaresScreen() {
     }
   };
 
+  const exportarObjetoDeObra = async (objetodeobra_id) => {
+    setObjetoExportando(objetodeobra_id);
+    setExportando(true);
+    setExportacionMensaje('');
+    setExportacionError('');
+
+    const renglonesDelObjeto = renglonesAsignados.filter(
+      (renglon) => String(renglon.objetodeobra_id ?? 'default') === String(objetodeobra_id ?? 'default')
+    );
+
+    if (renglonesDelObjeto.length === 0) {
+      setExportacionError('No hay renglones asignados a este objeto de obra.');
+      setExportando(false);
+      setObjetoExportando(null);
+      return;
+    }
+
+    try {
+      const objeto = objetosdeobras?.find((o) => String(o.id) === String(objetodeobra_id));
+      const nombreObjeto = objeto?.objetodeobra || 'Objeto de obra';
+
+      const datos = [
+        ['LISTADO DE CANTIDADES'],
+        ['Obra', laObra.obra || ''],
+        ['Objeto de obra', nombreObjeto],
+        [],
+        [
+          'Etapa',
+          'Código',
+          'Suministro',
+          'Descripción',
+          'Cantidad',
+          'Unidad Medida',
+          'Precio',
+          'CM',
+          'Importe Total',
+        ],
+        ...renglonesDelObjeto.map((renglon) => {
+          const cantidad = Number(renglon.cantidad) || 0;
+          const precio = Number(renglon.precio) || 0;
+          return [
+            renglon.IDSUbEtapa || '',
+            renglon.IDRVariante || '',
+            renglon.suministro_nombre || '',
+            renglon.RVariante || '',
+            cantidad,
+            renglon.suministro_unidad || renglon.umedicion || '',
+            precio,
+            '1',
+            cantidad * precio,
+          ];
+        }),
+        [],
+        ['TOTAL', '', '', '', '', '', '', '', renglonesDelObjeto.reduce((sum, r) => sum + (Number(r.cantidad) || 0) * (Number(r.precio) || 0), 0).toFixed(2)],
+      ];
+      const escaparXml = (valor) => String(valor).replace(/[<>&'"]/g, (caracter) => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&apos;',
+        '"': '&quot;',
+      })[caracter]);
+      const filasXml = datos.map((fila, indiceFila) => {
+        const celdasXml = fila.map((valor, indiceColumna) => {
+          const referencia = `${String.fromCharCode(65 + indiceColumna)}${indiceFila + 1}`;
+          if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return `<c r="${referencia}"><v>${valor}</v></c>`;
+          }
+          return `<c r="${referencia}" t="inlineStr"><is><t xml:space="preserve">${escaparXml(valor ?? '')}</t></is></c>`;
+        }).join('');
+        return `<row r="${indiceFila + 1}">${celdasXml}</row>`;
+      }).join('');
+
+      const zip = new PizZip();
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml" ContentType="application/xml"/>'
+        + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        + '</Types>');
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<sheets><sheet name="Listado de cantidades" sheetId="1" r:id="rId1"/></sheets>'
+        + '</workbook>');
+      zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + `<sheetData>${filasXml}</sheetData></worksheet>`);
+      const contenido = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const fecha = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = `Cantidades_${nombreObjeto.replace(/[^a-zA-Z0-9]/g, '_')}_${fecha}.xlsx`;
+      const tipoArchivo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      const directorioCache = FileSystem.cacheDirectory;
+      if (!directorioCache) {
+        throw new Error('No está disponible la carpeta temporal para crear el archivo.');
+      }
+      const uri = `${directorioCache}${nombreArchivo}`;
+      await FileSystem.writeAsStringAsync(uri, contenido, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('No hay una aplicación disponible para compartir o guardar el archivo.');
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: tipoArchivo,
+        dialogTitle: `Exportar cantidades de ${nombreObjeto}`,
+        UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      });
+      setExportacionMensaje(`Se abrió el menú para compartir el Excel de ${nombreObjeto}.`);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      setExportacionError(`No se pudo generar el Excel. ${detalle}`);
+    } finally {
+      setExportando(false);
+      setObjetoExportando(null);
+    }
+  };
+
   const preguntarDestinoExportacion = () => {
     setExportacionMensaje('');
     setExportacionError('');
@@ -499,6 +628,15 @@ export default function PreliminaresScreen() {
                 <Text style={styles.objetoObraHeading}>
                   {item.objetodeobra || 'Por defecto'}
                 </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Exportar cantidades de ${item.objetodeobra || 'objeto de obra'}`}
+                  onPress={() => exportarObjetoDeObra(item.objetodeobra_id)}
+                  style={styles.exportObjetoButton}
+                  disabled={objetoExportando === item.objetodeobra_id || exportando}
+                >
+                  <FontAwesome5 name="file-excel" size={14} color="#ffffff" />
+                </Pressable>
                 <Text style={styles.assignedPrice}>
                   $
                   {(totalesPorObjeto.get(String(item.objetodeobra_id ?? 'default')) ?? 0).toFixed(2)}
@@ -1181,6 +1319,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginLeft: 8,
+  },
+  exportObjetoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#192f6a',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginLeft: 8,
+    marginTop: 4,
   },
   exportButtonText: {
     color: '#ffffff',
