@@ -53,12 +53,6 @@
         }
       }
     ],
-    [
-      "expo-font",
-      {
-        "fonts": ["./assets/fonts/SIMPLIFICA.ttf"]
-      }
-    ],
     "expo-router",
     "expo-secure-store"
   ],
