@@ -11,13 +11,19 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText as Text, AppTextInput as TextInput } from './AppText';
 import ScreenHeader from './ScreenHeader';
 import { commonStyles } from '../styles/commonStyles';
+import { useObjetoSelection } from '../contexts/ObjetoSelectionContext';
 import { establecerObjetodeobraActivo, obtenerObjetosdeobras } from '../db/database';
 
 export default function ObjetosScreen() {
   const db = useSQLiteContext();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const seleccion = String(params.seleccion) === 'true';
+  const { setSelectedObjeto } = useObjetoSelection();
   const [objetos, setObjetos] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [nombre, setNombre] = useState('');
@@ -97,6 +103,13 @@ export default function ObjetosScreen() {
     try {
       await establecerObjetodeobraActivo(db, id);
       cargarObjetos();
+      if (seleccion) {
+        const objeto = objetos.find(item => String(item.id) === String(id));
+        if (objeto) setSelectedObjeto(objeto);
+        if (router.canGoBack()) {
+          router.back();
+        }
+      }
     } catch (error) {
       Alert.alert('Error', `No se pudo activar el objeto de obra. ${error.message}`);
     }
@@ -167,13 +180,15 @@ export default function ObjetosScreen() {
                   <Text style={activo ? styles.activeLabel : styles.inactiveLabel}>
                     {activo ? 'Activo' : 'Inactivo'}
                   </Text>
-                  {!activo && (
+                  {(!activo || seleccion) && (
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => establecerActivo(objeto.id)}
                       style={styles.activateButton}
                     >
-                      <Text style={styles.activateText}>Usar</Text>
+                      <Text style={styles.activateText}>
+                        {seleccion ? 'Seleccionar' : 'Usar'}
+                      </Text>
                     </Pressable>
                   )}
                   <Pressable

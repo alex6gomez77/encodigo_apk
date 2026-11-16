@@ -15,6 +15,7 @@ import {
   FiraSans_800ExtraBold,
 } from '@expo-google-fonts/fira-sans';
 import { SuministroSelectionProvider } from '../contexts/SuministroSelectionContext';
+import { ObjetoSelectionProvider } from '../contexts/ObjetoSelectionContext';
 import { migrarObras } from '../db/database';
 
 function SQLiteAccessGuard({ children }) {
@@ -138,9 +139,11 @@ export default function Layout() {
           >
             <StatusBar translucent backgroundColor="transparent" />
             <SuministroSelectionProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <Slot />
-              </GestureHandlerRootView>
+              <ObjetoSelectionProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <Slot />
+                </GestureHandlerRootView>
+              </ObjetoSelectionProvider>
             </SuministroSelectionProvider>
           </View>
         </LicenciaProvider>

@@ -8,7 +8,6 @@ import ScreenHeader from './ScreenHeader';
 import { commonStyles } from '../styles/commonStyles';
 import Checkbox from 'expo-checkbox';
 import { obtenerDetallesDelRenglon, obtenerRenglonPorId } from '../db/database';
-import AgregarRenglonObraModal from './AgregarRenglonObraModal';
 import { useSuministroSelection } from '../contexts/SuministroSelectionContext';
 
 const resumenRenglon = [
@@ -30,7 +29,6 @@ export default function DetalleRenglonScreen() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState('');
   const [conMateriales, setConMateriales] = useState(true);
-  const [agregarVisible, setAgregarVisible] = useState(false);
   const renglonId = Array.isArray(id) ? id[0] : id;
 
   useEffect(() => {
@@ -71,7 +69,14 @@ export default function DetalleRenglonScreen() {
   }, [db, renglonId]);
 
   const agregarAlObra = () => {
-    setAgregarVisible(true);
+    if (!renglon?.IDRVariante) return;
+    router.push({
+      pathname: '/AgregarRenglonObra',
+      params: {
+        id: String(renglon.IDRVariante),
+        conMateriales: String(conMateriales),
+      },
+    });
   };
 
   return (
@@ -221,12 +226,6 @@ export default function DetalleRenglonScreen() {
           >
             <FontAwesome5 name="plus" size={18} color="white" />
           </Pressable>
-          <AgregarRenglonObraModal
-            renglon={renglon}
-            visible={agregarVisible}
-            onClose={setAgregarVisible}
-            conMateriales={conMateriales}
-          />
         </>
       ) : null}
     </View>
