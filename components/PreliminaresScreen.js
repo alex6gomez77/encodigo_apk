@@ -689,6 +689,8 @@ export default function PreliminaresScreen() {
         copyToCacheDirectory: true,
       });
 
+      
+
       if (res.canceled || !res.assets || res.assets.length === 0) {
         setImportando(false);
         setObjetoImportando(null);
@@ -714,6 +716,8 @@ export default function PreliminaresScreen() {
         const match = m.match(/name="([^"]*)"/);
         return match ? match[1] : '';
       });
+
+      
 
       let nombreDesdeHoja = sheetNames[0] || '';
       let nombreObjetoFinal = 'default';
@@ -801,6 +805,7 @@ export default function PreliminaresScreen() {
       }
 
       const obraIdFinal = idObra || objetodeobraIdFinal;
+      
       for (const renglon of datosRenglones) {
         // ✅ FIX 8: misma firma que handleAgregarRCalObra
         await agregarRCalObra(
@@ -890,6 +895,7 @@ export default function PreliminaresScreen() {
                 item.objetodeobra_id) && (
               <Swipeable
                 renderRightActions={() => (
+                  <>
                   <RectButton
                     accessibilityRole="button"
                     accessibilityLabel={`Eliminar ${
@@ -900,26 +906,35 @@ export default function PreliminaresScreen() {
                   >
                     <FontAwesome5 name="trash" size={18} color="#fff" />
                   </RectButton>
-                )}
-              >
-                <View style={styles.objetoObraHeader}>
-                  <Text style={styles.objetoObraHeading}>
-                    {item.objetodeobra || 'Por defecto'}
-                  </Text>
-                  <Pressable
+
+                  <RectButton
+                    accessibilityRole="button"
+                    accessibilityLabel={`Eliminar ${
+                      item.objetodeobra || 'objeto de obra'
+                    } de la obra`}
+                    onPress={() => confirmarEliminarObjetoDeObra(item)}
+                    style={styles.swipeChangeOOAction}
+                  >
+                  <FontAwesome5
+                  name='exchange-alt'
+                  size={16}
+                  color="#fff"
+                />
+                 </RectButton>
+                 <RectButton
                     accessibilityRole="button"
                     accessibilityLabel={`Exportar cantidades de ${
                       item.objetodeobra || 'objeto de obra'
                     }`}
                     onPress={() => exportarObjetoDeObra(item.objetodeobra_id)}
-                    style={styles.exportObjetoButton}
+                    style={styles.swipeChangeOOAction}
                     disabled={
                       objetoExportando === item.objetodeobra_id || exportando
                     }
                   >
                     <FontAwesome5 name="file-excel" size={14} color="#ffffff" />
-                  </Pressable>
-                  <Pressable
+                  </RectButton>
+                  <RectButton
                     accessibilityRole="button"
                     accessibilityLabel={`Importar cantidades de ${
                       item.objetodeobra || 'objeto de obra'
@@ -928,9 +943,9 @@ export default function PreliminaresScreen() {
                       setObjetoImportando(item.objetodeobra_id);
                       setImportModalVisible(true);
                     }}
-                    style={styles.importObjetoButton}
+                    style={[styles.importObjetoButton, {opacity: 0.5}]}
                     disabled={
-                      objetoImportando === item.objetodeobra_id || importando
+                      true || objetoImportando === item.objetodeobra_id || importando
                     }
                   >
                     <FontAwesome5
@@ -938,7 +953,14 @@ export default function PreliminaresScreen() {
                       size={14}
                       color="#ffffff"
                     />
-                  </Pressable>
+                 </RectButton>
+                 </>
+                )}
+              >
+                <View style={styles.objetoObraHeader}>
+                  <Text style={styles.objetoObraHeading}>
+                    {item.objetodeobra || 'Por defecto'}
+                  </Text>
                   <Text style={styles.assignedPrice}>
                     $
                     {(
@@ -947,6 +969,8 @@ export default function PreliminaresScreen() {
                       ) ?? 0
                     ).toFixed(2)}
                   </Text>
+                  
+                  
                 </View>
               </Swipeable>
             )}
@@ -966,14 +990,12 @@ export default function PreliminaresScreen() {
                 <View style={commonStyles.detallesItemContainer}>
                   <View style={{ flex: 1, flexDirection: 'row' }}>
                     <Text style={styles.subetapa}>
-                      Etapa: {item.IDSubEtapa || ''} {item.SubEtapa || ''}
+                      Etapa: <Text style={{fontWeight: 'bold'}}> {item.IDSubEtapa || ''} </Text>{item.SubEtapa || ''}
                     </Text>
                   </View>
 
                   <View style={styles.assignedLineHeader}>
-                    <Text style={commonStyles.campoCodigo}>
-                      {item.IDRVariante}
-                    </Text>
+                    
                     <Text
                       style={styles.assignedHierarchy}
                       numberOfLines={2}
@@ -985,26 +1007,38 @@ export default function PreliminaresScreen() {
                     </Text>
                   </View>
                   <Text style={styles.assignedDescription}>
-                    {item.RVariante || 'Renglón sin descripción'}
+                   <Text style={{fontWeight: 'bold'}}>
+                      {item.IDRVariante}
+                    </Text> {item.RVariante || 'Renglón sin descripción'}
                   </Text>
-                  {!!item.suministro_nombre && (
+                  {!!item.cm && (
                     <Text style={styles.assignedNotes}>
-                      {`Suministro: ${item.suministro_nombre} (${item.IDRecurso})`}
+                      Incluyecdo los Materiales
                     </Text>
                   )}
-                  <View style={{ flex: 1, flexDirection: 'row' }}>
-                    <Text style={styles.assignedPrice}>
-                      {item.cantidad} x {item.umedicion || ''}
+                  {!!item.suministro_nombre && (
+                    <Text style={styles.assignedNotes}>
+                      {`Suministro: ${item.IDRecurso} | ${item.suministro_nombre} `}
                     </Text>
+                  )}
+                  <View style={{ flex: 1, flexDirection: 'row',   justifyContent: 'space-between'}}>
                     <Text style={styles.assignedPrice}>
-                      Precio: ${Number(item.precio ?? 0).toFixed(2)}
+                      {item.cantidad} x {item.um || ''}
                     </Text>
-                    <Text style={styles.assignedPrice}>
-                      Costo: $
-                      {(
-                        Number(item.precio ?? 0) * Number(item.cantidad ?? 0)
-                      ).toFixed(2)}
-                    </Text>
+                    <View style={{ flexDirection: 'row'}}>
+                      <Text style={styles.assignedPrice}>
+                        Precio: ${Number(item.precio ?? 0).toFixed(2)}
+                      </Text>
+                      <Text style={styles.assignedPrice}>
+                        Costo: 
+                        <Text style={{fontWeight: 'bold'}}>
+                        $
+                        {(
+                          Number(item.precio ?? 0) * Number(item.cantidad ?? 0)
+                        ).toFixed(2)}
+                        </Text>
+                      </Text>
+                    </View>
                   </View>
                   {!!item.observaciones && (
                     <Text style={styles.assignedNotes}>
@@ -1865,16 +1899,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     marginTop: 4,
   },
-  importObjetoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  importObjetoButton: {    
     backgroundColor: '#e67e22',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginLeft: 6,
-    marginTop: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 30,
+    marginVertical: 4,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    marginHorizontal: 4
   },
   exportButtonText: {
     color: '#ffffff',
@@ -1916,9 +1949,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#c62828',
     justifyContent: 'center',
     alignItems: 'center',
-    width: 72,
+    width: 50,
     marginVertical: 4,
     borderRadius: 6,
+    marginHorizontal: 2
+  },
+  swipeChangeOOAction: {
+    backgroundColor: '#4b86b4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 30,
+    marginVertical: 4,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    marginHorizontal: 2
   },
   deleteObjectButton: {
     flexDirection: 'row',
@@ -1954,7 +1998,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#555',
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 14,
   },
   assignedQuantity: {
     color: '#192f6a',
@@ -1963,11 +2007,9 @@ const styles = StyleSheet.create({
   assignedDescription: {
     fontSize: 14,
     fontFamily: 'FiraSans_400Regular',
-    fontWeight: 'bold',
-    marginTop: 3,
   },
   assignedPrice: {
-    fontSize: 16,
+    fontSize: 14,
     marginTop: 3,
     paddingRight: 5,
   },

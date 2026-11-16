@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { AppText as Text, AppTextInput as TextInput } from './AppText';
 import { commonStyles } from '../styles/commonStyles';
+import { useLicencia, LICENCIA_ESTADOS } from '../contexts/LicenciaContext.js';
 import { useSuministroSelection } from '../contexts/SuministroSelectionContext';
 import {
   agregarRCalObra,
@@ -16,12 +17,16 @@ import {
   obtenerObraActiva,
   obtenerObras,
   obtenerEtapas,
-  activarEtapa
+  activarEtapa,
+  cantidadRenglonesAsignados
 } from '../db/database';
 
-export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
+const LIMITE = 50;
+
+export default function AgregarRenglonObraModal({ renglon, visible, onClose, conMateriales }) {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { licenciaEstado } = useLicencia();
   const { selectedSuministro, setSelectedSuministro } = useSuministroSelection();
   const [obras, setObras] = useState([]);
   const [obraId, setObraId] = useState(null);
@@ -31,11 +36,12 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
   const [etapas, setEtapas] = useState([]);
   const [etapaId, setEtapaId] = useState(null)
   const [cantidad, setCantidad] = useState('1');
+  const [renglonesAsignados, setRenglonesAsignados] = useState('0');
   const [irAPreliminares, setIrAPreliminares] = useState(false);
   const datosCargadosRef = useRef(false);
   const cantidadNumerica = Number(String(cantidad).trim().replace(',', '.'));
   const precioSuministro = Number(selectedSuministro?.Precio);
-  const precioRC = Number(renglon?.Precio ?? 0);
+  const precioRC = conMateriales ? Number(renglon?.Precio ?? 0) : Number(renglon?.CDManoObra + renglon?.CDUsoEquipos ?? 0);
   const precioUnitario = Number.isFinite(precioSuministro)
     ? precioSuministro
     : (Number.isFinite(precioRC) ? precioRC : 0);
@@ -48,13 +54,14 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
   const cargarDatosObra = useCallback(async () => {
     if (datosCargadosRef.current) return;
     try {
-      const [obrasCargadas, obraActiva, objetoActivo, objetosCargados, etapasCargadas, etapaActiva] = await Promise.all([
+      const [obrasCargadas, obraActiva, objetoActivo, objetosCargados, etapasCargadas, etapaActiva, losRenglonesAsignados] = await Promise.all([
         obtenerObras(db),
         obtenerObraActiva(db),
         obtenerObjetodeobraActivo(db),
         obtenerObjetosdeobras(db),
         obtenerEtapas(db),
-        activarEtapa(db, renglon.IDSobreGrupo) 
+        activarEtapa(db, renglon.IDSobreGrupo),
+        cantidadRenglonesAsignados(db)
       ]);
       if (!Array.isArray(objetosCargados)) {
         throw new Error('La consulta de objetos de obra no devolvió una lista válida.');
@@ -64,7 +71,8 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
       setObraId(obraActiva?.id ?? null);
       setObraNombre(obraActiva?.obra ?? '');
       setObjetosDeObra(objetosCargados);
-      setEtapas(etapasCargadas);
+      setEtapas(etapasCargadas);      
+      setRenglonesAsignados(losRenglonesAsignados.cantidad);      
       setObjetoDeObraId(
         objetoActivo?.objetodeobra_activo ?? objetosCargados[0]?.id ?? null
       );
@@ -75,6 +83,25 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
       Alert.alert('Error', `No se pudieron cargar los datos para agregar el renglón. ${mensaje}`);
     }
   }, [db]);
+
+
+
+
+    // Función para determinar si las características premium están deshabilitadas
+  const isPremiumDisabled = () => {
+    switch (licenciaEstado) {
+      case LICENCIA_ESTADOS.SIN_LICENCIA:
+      case LICENCIA_ESTADOS.TRIAL_VENCIDA:
+      case LICENCIA_ESTADOS.ORIGINAL_VENCIDA:
+      case LICENCIA_ESTADOS.ERROR:
+        return true;
+      case LICENCIA_ESTADOS.TRIAL_ACTIVA:
+      case LICENCIA_ESTADOS.ORIGINAL_ACTIVA:
+        return false;
+      default:
+        return true;
+    }
+  };
 
   const cerrar = () => {
     datosCargadosRef.current = false;
@@ -135,13 +162,17 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
         cantidadNumerica,
         precioUnitario,
         '',
-        suministroId
+        suministroId,
+        unidadCantidad,
+        selectedSuministro ? selectedSuministro.recurso : renglon.RVariante,
+        conMateriales
       );
+     
       cerrar();
       setSelectedSuministro(null);
       Alert.alert(
         'Renglón constructivo añadido',
-        `Se añadió con éxito el renglón constructivo ${renglon.IDRVariante} a la obra.`
+        `Se añadió con éxito el renglón constructivo ${renglon.IDRVariante} ${selectedSuministro ? ', con el suministro ' + selectedSuministro.IDRecurso : ''} a la obra ${obraNombre}.`
       );
 
       if (irAPreliminares) {
@@ -174,21 +205,15 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
               <Text>AGREGANDO RENGLÓN A LA OBRA</Text>
-              {!!obraId && <Text style={styles.headerText}>{obraNombre}</Text>}
+              {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}
             </View>
           </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
             <View style={styles.renglonInfo}>
               <Text style={styles.hierarchyText}>
-                 {renglon?.IDSobreGrupo ?? '—'} {renglon?.SobreGrupo || 'Sin sección'}
-              </Text>
-              <Text style={styles.hierarchyText}>
-                 {renglon?.IDGrupo ?? '—'} {renglon?.Grupo || 'Sin capítulo'}
-              </Text>
-              <Text style={styles.hierarchyText}>
-                 {renglon?.IDSubGrupo ?? '—'} {renglon?.SubGrupo || 'Sin subcapítulo'}
-              </Text>
+                 {renglon?.SobreGrupo || 'Sin sección'} | {renglon?.Grupo || 'Sin capítulo'} | {renglon?.SubGrupo || 'Sin subcapítulo'}
+              </Text>             
               <View style={styles.renglonTitle}>
                 <Text style={[commonStyles.renglonName, {fontWeight: 'bold'}]} 
                 numberOfLines={3} 
@@ -197,8 +222,14 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
                   {renglon?.IDRVariante} <Text style={{fontWeight: '500'}}>{renglon?.RVariante}</Text>
                 </Text>
               </View>
-              <Text style={styles.renglonPrice}>
-                Precio: ${Number(renglon?.Precio ?? 0).toFixed(2)} x {renglon?.umedicion || '—'}
+              <Text style={[styles.renglonPrice, selectedSuministro && { opacity: 0.3, textDecorationLine: 'line-through' }]}>
+                Precio: ${Number(precioRC ?? 0).toFixed(2)}  | Unidad: {renglon?.umedicion || '—'} | 
+                {conMateriales ? 
+                <Text style={{color: '#4b86b4'}} > Incluye los Materiales</Text>
+                 
+                : 
+                <Text style={{color: '#b42318', paddingHorizontal: 10}} > Sin Materiales</Text>
+                }
               </Text>
             </View>
 
@@ -220,7 +251,10 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
                     </View>
                   <View style={styles.supplyRow}>
                     <Text style={[styles.supplyDetails, styles.supplyDetailsFlex]}>
-                      {`${selectedSuministro.Recurso} | Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} | Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)}`}
+                      {`${selectedSuministro.Recurso} | Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'}  `}
+                    </Text>
+                    <Text style={[styles.supplyDetails, {color: 'black', fontSize: 14}]}>
+                      {`Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} `}
                     </Text>
                     
                   </View>
@@ -264,31 +298,43 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
                   ))}
                 </Picker>
               </View>
-
-              <Text style={styles.label}>Cantidad</Text>
-              <View style={styles.quantityInputRow}>
-                <TextInput
-                  style={[styles.input, styles.quantityInput]}
-                  keyboardType="decimal-pad"
-                  value={cantidad}
-                  onChangeText={setCantidad}
-                />
-                <View style={styles.quantityUnit}>
-                  <Text style={styles.quantityUnitText}>{unidadCantidad}</Text>
+           
+              <View style={{flexDirection: 'column'}}>
+                <Text style={styles.label}>Cantidad</Text>
+                
+                <View style={styles.quantityInputRow}>
+                  <TextInput
+                    style={[styles.input, styles.quantityInput]}
+                    keyboardType="decimal-pad"
+                    value={cantidad}
+                    onChangeText={setCantidad}
+                  />
+                  <View style={styles.quantityUnit}>
+                    <Text style={styles.quantityUnitText}>{unidadCantidad}</Text>
+                  </View>
                 </View>
               </View>
+
 
               <View style={styles.quantityTotalFloat}>
                 <Text style={styles.quantityTotalLabel}>Precio según Cantidad</Text>
                 <Text style={styles.quantityTotalAmount}>${precioTotal.toFixed(2)}</Text>
               </View>
 
+            
+            
+
+
+
+
+            <View style={{flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between'}}>
               <View style={styles.checkboxRow}>
                 <Checkbox
                   value={irAPreliminares}
                   onValueChange={setIrAPreliminares}
                   color={irAPreliminares ? '#192f6a' : undefined}
                   accessibilityLabel="Ir a Preliminares"
+                  style={{ width: 12, height: 12 }}
                 />
                 <Pressable onPress={() => setIrAPreliminares(value => !value)}>
                   <Text style={styles.checkboxLabel}>Ir a Preliminares</Text>
@@ -296,10 +342,33 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose }) {
               </View>
 
               <View style={commonStyles.buttonsRow}>
-                <TouchableOpacity style={commonStyles.buttonAgregar} onPress={agregar}>
+                <TouchableOpacity style={commonStyles.buttonAgregar}
+                  onPress={() => {
+                  if (!isPremiumDisabled() && renglonesAsignados >= LIMITE) {
+                    // Opcional: mostrar alerta cuando se alcanza el límite
+                  Alert.alert(
+                    'Límite de Renglones alcanzado',
+                    `Has asignado ya el máximo de Renglones Constructivos permitidos para una Obra (${LIMITE}). Actualiza a Premium continuar asignando Renglones ilimitados.`,
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      { 
+                        text: 'Ir a Zona de Licencia', 
+                        onPress: () => router.push('/Licencia'),
+                        style: 'default'
+                      }
+                    ]
+                  );
+                  } else {
+                    agregar();
+                  }
+                }} 
+                 
+                >
                   <Text style={commonStyles.buttonTextAgregar}>Agregar</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+
             </View>
           </ScrollView>
         </View>
@@ -342,13 +411,13 @@ const styles = StyleSheet.create({
   renglonInfo: {
     backgroundColor: '#fff',
     borderRadius: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 2,
     marginVertical: 0,
   },
   hierarchyText: {
     color: '#555',
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 14,
   },
   renglonTitle: {
     flexDirection: 'row',
@@ -377,13 +446,13 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   supplyRow: {
-    flexDirection: 'row',
+   // flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginTop: 6,
+    //gap: 8,
+    //marginTop: 6,
   },
   supplyDetails: {
-    marginTop: 6,
+    //marginTop: 6,
     color: '#555',
     fontSize: 12,
   },
@@ -425,6 +494,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
+    maxWidth: '50%',
   },
   quantityInputRow: {
     flexDirection: 'row',
@@ -433,14 +503,15 @@ const styles = StyleSheet.create({
   },
   quantityInput: {
     flex: 1,
+   
   },
   quantityUnit: {
-    minHeight: 42,
-    maxWidth: '45%',
+    minHeight: 35,
+    maxWidth: '80%',
     justifyContent: 'center',
     paddingHorizontal: 12,
     marginBottom: 8,
-    borderRadius: 6,
+    borderRadius: 5,
     backgroundColor: '#eef3f8',
     borderWidth: 1,
     borderColor: '#d3dfeb',
@@ -477,10 +548,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginVertical: 8,
   },
   checkboxLabel: {
-    fontSize: 16,
+    fontSize: 14,
     flexShrink: 1,
   },
 });

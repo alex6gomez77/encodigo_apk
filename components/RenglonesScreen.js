@@ -175,22 +175,21 @@ export default function RenglonesScreen() {
       data={renglones}
       keyExtractor={(item) => item.IDRVariante.toString()}
       renderItem={({ item }) => (
-        <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>
-          <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0}}>
-            <Text style={commonStyles.campoCodigo}>{item.IDRVariante} </Text>
-              <Text 
-                style={[commonStyles.campoCodigo2, { flex: 1, flexShrink: 1 }]} 
-                numberOfLines={3} 
-                ellipsizeMode="tail"
-              > 
-                {item.SobreGrupo}  | {item.Grupo}  | {item.SubGrupo}
-              </Text>
-          </View>
-            <Pressable              
-              onPress={() => abrirModalDetalles(item)}
-            >
-             <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', color: '#192f6a' }}>{item.RVariante}</Text>
-            </Pressable>
+        <View style={commonStyles.detallesItemContainer}>
+
+          <Pressable              
+            onPress={() => abrirModalDetalles(item)}
+          >          
+            <Text style={commonStyles.campoCodigo2}>
+                {item.SobreGrupo}  | {item.Grupo}  | {item.SubGrupo} 
+              </Text> 
+            <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+              <Text style={[commonStyles.campoCodigo,{ color: '#192f6a'}]}>{item.IDRVariante}  <Text style={{fontWeight:'400', color:'black'}}>{item.RVariante}</Text></Text>
+            </View>            
+          </Pressable>   
+
+
+         
           
         </View>
       )}

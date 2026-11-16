@@ -48,7 +48,7 @@ export function AppButton({ title, onPress, color, disabled }) {
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: 'center',
-        backgroundColor: color || '#4c669f',
+        backgroundColor: color || '#4b86b4',
         borderRadius: 5,
         opacity: disabled ? 0.5 : pressed ? 0.75 : 1,
         paddingHorizontal: 14,

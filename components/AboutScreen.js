@@ -11,19 +11,21 @@ export default function AboutScreen(){
         <View style={styles.infoBox}>
           <ScrollView>
             <Image          
-              source={require('../assets/logo.png')}
+              source={require('../assets/logo-portada.png')}
               style={styles.logo}
               resizeMode="contain"
             />
 
-            <Text style={styles.label}>Nombre de la Aplicación:</Text>
-            <Text style={styles.value}>ENCODIGO - SISTEMA DE CÓDIGOS DEL PRECONS & CÁLCULOS ESTIMADOS DE PRECIOS. </Text>
+            <Text style={styles.subtitleText}>
+              SISTEMA DE CÓDIGOS DEL PRECONS III{'\n'}CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}Versión: 1.0.0 {'\n'}( Build 13112026 )
+            </Text>
 
-            <Text style={styles.label}>Versión:</Text>
-            <Text style={styles.value}>1.0.0  ( Build 15102026 )</Text>
-
+           
             <Text style={styles.label}>Desarrollador:</Text>
             <Text style={styles.value}>Lic. Alexei Gómez Ruiz (Especialista en Ciencias Informáticas)</Text>
+
+            <Text style={styles.label}>Colaborador:</Text>
+            <Text style={styles.value}>MSc. Ing. Abel Vladimir López Bravo (Especialista en Obras Civiles)</Text>
 
             <Text style={styles.label}>E-mail:</Text>
             <Text style={styles.value}>alex6gomez77@gmail.com </Text>
@@ -55,9 +57,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  infoBox: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+  infoBox: {   
     marginHorizontal: 16,
     paddingBottom: 16,
     paddingHorizontal: 16,
@@ -67,20 +67,25 @@ const styles = StyleSheet.create({
   label: {
     fontWeight: 'bold',
     marginTop: 12,
+    textAlign: 'center'
   },
   value: {
     marginLeft: 8,
+    textAlign: 'center'
   },
   paragraph: {
     marginTop: 8,
     lineHeight: 18,
+    textAlign: 'center'
   },
   logo: {
-    width: 150,
-    height: 150,
-    backgroundColor: '#f2f2f2',
-    borderRadius: 75,
+    width: 100,
+    height: 100,    
     alignSelf: 'center',
-    marginTop: 20,
+  },
+  subtitleText: {
+    marginTop: 1,
+    color: '#192f6a',
+    textAlign: 'center'
   },
 });

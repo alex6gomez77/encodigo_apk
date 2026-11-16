@@ -35,6 +35,15 @@ export const obtenerObjetodeobraActivo = (db) => {
     'SELECT objetodeobra_activo FROM generales ORDER BY id LIMIT 1');
 };
 
+export const cantidadRenglonesAsignados = (db) => {
+  return db.getFirstAsync(
+    `SELECT COUNT(listadodecantidades.id) as cantidad 
+     FROM listadodecantidades 
+     JOIN generales ON generales.obra_activa == listadodecantidades.obra_id
+    `
+  );
+};
+
 export const establecerObjetodeobraActivo = (db, objetodeobra_id) => {
   return db.runAsync(
     `UPDATE generales SET 
@@ -648,13 +657,16 @@ export const agregarRCalObra = async (
   cantidad,
   precio,
   observaciones,
-  IDRecurso = null
+  IDRecurso = null,
+  um, 
+  descripcion,
+  conMateriales
 ) => {
   return db.runAsync(
     `INSERT INTO listadodecantidades
-      (obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa
+      (obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa, um, descripcion, cm)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa, um, descripcion, conMateriales
   );
 }
 
@@ -667,6 +679,7 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
             listadodecantidades.cantidad,
             listadodecantidades.precio,
             listadodecantidades.observaciones,
+            listadodecantidades.um,
             COALESCE(recursos.IDRecurso, listadodecantidades.IDRecurso) AS IDRecurso,
             objetosdeobras.objetodeobra,
             rvariantes.RVariante,

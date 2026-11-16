@@ -318,7 +318,6 @@ export default function ObrasScreen() {
     const codigo = formData.codigo.trim();
     const nombre = formData.obra.trim();
     const clienteId = Number(formData.cliente_id);
-    console.log('Los valores: ', codigo, nombre, clienteId);
     if (!codigo || !nombre || !Number.isInteger(clienteId) || clienteId <= 0) {
       Alert.alert('Validación', 'Debe completar Código, Obra y Cliente');
       return;
@@ -359,12 +358,15 @@ export default function ObrasScreen() {
         nombre,
         clienteId,
         formData.observaciones.trim(),
+        'ax6',
+        ...valoresNumericos
       ];
  
       if (editarId != null) {
         await db.runAsync(
           `UPDATE obras SET
-             codigo = ?, obra = ?, cliente_id = ?,descripcion = ?
+             codigo = ?, obra = ?, cliente_id = ?,observaciones = ?, autor = ?, p100utilidades = ?, p100impuestos = ?,
+               p100vacaciones = ?, p100contribuciones = ?, p100gastos = ?, p100impuestosft = ?, p100osde = ?
            WHERE id = ?`,
           ...parametros,
           editarId
@@ -375,51 +377,21 @@ export default function ObrasScreen() {
         await db.withTransactionAsync(async () => {
           const result = await db.runAsync(
             `INSERT INTO obras
-              (codigo, obra, cliente_id, identidad,  p100utilidades, p100impuestos,
-               p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, p100osde,
-                observaciones)
+              (codigo, obra, cliente_id, observaciones, autor, p100utilidades, p100impuestos,
+               p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, p100osde
+                )
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             ...parametros
           );
           obraId = result.lastInsertRowId;
 
-          const partidas = await db.getAllAsync(
-            'SELECT * FROM plantillapartidas WHERE activo = 1 ORDER BY item'
+          await db.runAsync(
+            `UPDATE generales SET obra_activa = ?`, [obraId]
           );
-          for (const partida of partidas) {
-            await db.runAsync(
-              'INSERT INTO obrapartidas (obra_id, plantilla_id, coeficiente) VALUES (?, ?, ?)',
-              obraId,
-              partida.id,
-              partida.coeficiente
-            );
-          }
 
-          const subpartidas = await db.getAllAsync(`
-            SELECT plantillasubpartidas.*, plantillapartidas.coeficiente
-            FROM plantillasubpartidas
-            INNER JOIN plantillapartidas ON plantillapartidas.id = plantillasubpartidas.partida_id
-            WHERE plantillasubpartidas.activo = 1
-            ORDER BY plantillasubpartidas.fila
-          `);
-          for (const subpartida of subpartidas) {
-            const importe = subpartida.id === 39 && contribucionEspecial > 0
-              ? contribucionEspecial
-              : null;
-            const observaciones = importe == null ? null : formData.observaciones.trim();
-            await db.runAsync(
-              `INSERT INTO obrasubpartidas
-                (obra_id, plantilla_id, coeficiente, importe, observaciones)
-               VALUES (?, ?, ?, ?, ?)`,
-              obraId,
-              subpartida.id,
-              subpartida.coeficiente,
-              importe,
-              observaciones
-            );
-          }
+          
         });
-        Alert.alert('Éxito', 'Obra y partidas agregadas correctamente.');
+        Alert.alert('Éxito', 'Obra agregada correctamente.');
       }
 
       setModalVisible(false);
@@ -469,41 +441,10 @@ export default function ObrasScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await db.withTransactionAsync(async () => {
-                await db.runAsync(
-                  `UPDATE cronogramas
-                   SET dependencia_id = NULL
-                   WHERE dependencia_id IN (
-                     SELECT cronogramas.id
-                     FROM cronogramas
-                     INNER JOIN obrarhumanos
-                       ON obrarhumanos.id = cronogramas.obrarhumano_id
-                     WHERE obrarhumanos.obra_id = ?
-                   )`,
-                  id
-                );
-                await db.runAsync(
-                  `DELETE FROM cronogramas
-                   WHERE obrarhumano_id IN (
-                     SELECT id FROM obrarhumanos WHERE obra_id = ?
-                   )`,
-                  id
-                );
-                for (const tabla of [
-                  'listadodecantidades',
-                  'tempobrainsumos',
-                  'obrainsumos',
-                  'obraequipos',
-                  'obrarhumanos',
-                  'obrasubpartidas',
-                  'obrapartidas',
-                ]) {
-                  await db.runAsync(`DELETE FROM ${tabla} WHERE obra_id = ?`, id);
-                }
-                await db.runAsync(
-                  'UPDATE generales SET obra_activa = NULL WHERE obra_activa = ?',
-                  id
-                );
+              await db.withTransactionAsync(async () => {   
+                await db.runAsync(`DELETE FROM listadodecantidades WHERE obra_id = ?`, id);
+                await db.runAsync(`DELETE FROM preliminares WHERE servicio_id = ?`, id); 
+                await db.runAsync('UPDATE generales SET obra_activa = NULL');
                 await db.runAsync('DELETE FROM obras WHERE id = ?', id);
               });
 
@@ -1593,12 +1534,12 @@ export default function ObrasScreen() {
             )}
           >
             <View style={commonStyles.detallesItemContainer}>            
-            <Text style={{ fontSize: 12, paddingTop: 16, color: '#666' }} >
+            <Text style={{ fontSize: 12, paddingTop: 8, color: '#666' }} >
                {obra.codigo || ""} 
             </Text>
             <Link href={{ pathname: '/Preliminares', params: { obraId: String(obra.id) } }} asChild >
               <TouchableOpacity>
-                <Text style={{ color: '#192f6a',  fontSize: 14, fontWeight: '800', paddingTop: 8}} >{obra.obra.toUpperCase()}</Text> 
+                <Text style={{ color: '#192f6a',  fontSize: 14, fontWeight: '800'}} >{obra.obra.toUpperCase()}</Text> 
               </TouchableOpacity>
             </Link>   
             <Text style={{fontSize: 12, flex: 1, flexShrink: 1}} 
@@ -1625,36 +1566,30 @@ export default function ObrasScreen() {
 
            
 
-            <View style={styles.botonesListadoObras}>
-                
-            
-              <View style={styles.botonesContainer}>
-                <TouchableOpacity onPress={() => handleSaveObra(obra)} style={[commonStyles.buttonObraFlotante, {backgroundColor: "#ffffff"}]}>
-                  <FontAwesome5 name="save" size={20} color="#4c669f" />
-                </TouchableOpacity>
-
+            <View style={styles.botonesListadoObras}> 
+              <View style={styles.botonesContainer}>               
                 <TouchableOpacity 
                   onPress={() => handleEditarObra(obra)} 
                   style={[
                     commonStyles.buttonObraFlotante, 
-                    {backgroundColor: "#ffffff"}, 
+                    {backgroundColor: "#4b86b4"}, 
                     isPremiumDisabled() && { opacity: 0.3 }
                   ]}
                   disabled={isPremiumDisabled()}
                 >
-                  <FontAwesome5 name="edit" size={20} color={isPremiumDisabled() ? '#999' : '#4c669f'} />
+                  <FontAwesome5 name="edit" size={15} color={isPremiumDisabled() ? '#999' : '#ffffff'} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   onPress={() => { setObraADuplicar(obra); setDuplicarFormData({ codigo: obra.codigo + '-Copia', obra: obra.obra + '-Copia' }); setDuplicarModalVisible(true); }}
                   style={[
                     commonStyles.buttonObraFlotante,
-                    {backgroundColor: "#ffffff"},
+                    {backgroundColor: "#4b86b4"},
                     (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }
                   ]}
                   disabled={lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled()}
                 >
-                  <FontAwesome5 name="plus" size={20} color={lalicencia?.licenseKey === 'TRIAL' ||  isPremiumDisabled() ? '#999' : '#4c669f'} />
+                  <FontAwesome5 name="plus" size={15} color={lalicencia?.licenseKey === 'TRIAL' ||  isPremiumDisabled() ? '#999' : '#ffffff'} />
                 </TouchableOpacity>
                
 
@@ -1662,21 +1597,35 @@ export default function ObrasScreen() {
                   onPress={() => exportarCantidadesObra(obra)}
                   style={[
                     commonStyles.buttonObraFlotante, 
-                    {backgroundColor: "#ffffff"}, 
-                    exportando && { opacity: 0.5 }
+                    {backgroundColor: "#217346"}, 
+                    exportando && { opacity: 0.5 },
+                    (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }
                   ]}
                   disabled={exportando}
                 >
-                  <FontAwesome5 name="file-csv" size={20} color={exportando ? '#999' : '#217346'} />
+                  <FontAwesome5 name="file-excel" size={15} color={exportando ? '#999' : '#ffffff'} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleSaveObra(obra)}
+                  style={[
+                    commonStyles.buttonObraFlotante, 
+                    {backgroundColor: "#4b86b4"}, 
+                    exportando && { opacity: 0.5 }, 
+                    isPremiumDisabled() && { opacity: 0.3 }
+                  ]}
+                  disabled={isPremiumDisabled()}
+                >
+                  <FontAwesome5 name="file-word" size={15} color={exportando ? '#999' : '#ffffff'} />
                 </TouchableOpacity>
               </View>
             </View>
            
             {obra.obra_activa ? (
               <View style={commonStyles.etiquetaObraActiva}>
-                <FontAwesome5 name="check-circle" size={15} color="#eeff04" />
+                <FontAwesome5 name="check-circle" size={15} color="#192f6a" />
                 
-                <Text style={{ fontSize: 14, color: '#eeff04' }}>
+                <Text style={{ fontSize: 14, color: '#192f6a', fontWeight: 'bold' }}>
                   OBRA ACTIVA
                 </Text>
               </View>
@@ -1687,7 +1636,7 @@ export default function ObrasScreen() {
                 onPress={() => activarObra(obra)}
                 style={commonStyles.etiquetaObraInactiva}
               >
-                <FontAwesome5 name="check-circle" size={15} color="#192f6a" />
+                <FontAwesome5 name="check-circle" size={15} color="#999" />
                 <Text style={styles.activateWorkButtonText}>Activar</Text>
               </TouchableOpacity>
             )}
@@ -1749,7 +1698,7 @@ export default function ObrasScreen() {
           setModalFiltroVisible(true);
         }}
       >
-        <FontAwesome5 name="filter" size={18} color="#ff9800" />
+        <FontAwesome5 name="filter" size={15} color="#fff" />
       </Pressable>
 
       {filtroObraAplicado ? (
@@ -1917,9 +1866,7 @@ export default function ObrasScreen() {
             onChangeText={text => handleChange('observaciones', text)}
           />
 
-          
-        </ScrollView>
-        <View style={styles.buttonsRow}> 
+          <View style={styles.buttonsRow}> 
           <TouchableOpacity style={commonStyles.buttonAgregar} onPress={handleGuardarObra} >
                 <Text style={commonStyles.buttonTextAgregar}>{editarId ? "Guardar" : "Agregar"}</Text>
               </TouchableOpacity>
@@ -1927,6 +1874,8 @@ export default function ObrasScreen() {
                 <Text style={commonStyles.buttonTextAgregar}>Cancelar</Text>
               </TouchableOpacity>
         </View>
+        </ScrollView>
+        
       </Modal>
 
       <Modal
@@ -1975,7 +1924,7 @@ const styles = StyleSheet.create({
   obraItem: { padding: 12, borderBottomWidth: 1, borderColor: '#ccc' },
   obraCodigo: { fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
 
-  modalContainer: { paddingHorizontal: 20, backgroundColor: '#f9f9f9', marginBottom: 12 },
+  modalContainer: { paddingHorizontal: 20, backgroundColor: '#f9f9f9', marginBottom: 20, paddingVertical: 10 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
   modalFiltroOverlay: {
     flex: 1,
@@ -2015,7 +1964,7 @@ const styles = StyleSheet.create({
   label: { fontWeight: '600', marginTop: 12 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 8, marginTop: 4, backgroundColor: '#fff' },
   pickerWrapper: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 4, backgroundColor: '#fff' },
-  buttonsRow: { flexDirection: 'row', justifyContent: 'space-between',  marginHorizontal: 16, marginBottom: 16 },
+  buttonsRow: { flexDirection: 'row', justifyContent: 'space-between',  marginHorizontal: 16, marginBottom: 16, paddingVertical: 10 },
   botonesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2038,13 +1987,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: '#4c669f',
+    borderColor: '#4b86b4',
     borderRadius: 6,
     paddingVertical: 8,
     marginTop: 8,
   },
   activateWorkButtonText: {
-    color: '#192f6a',
+    color: '#999',
     fontSize: 12,
     fontWeight: '600',
   },

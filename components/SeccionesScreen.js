@@ -189,15 +189,14 @@ export default function SeccionesScreen() {
       keyExtractor={(item) => item.IDSobreGrupo.toString()}
       renderItem={({ item }) => (
         <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>
-          <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
-            <Text style={commonStyles.campoCodigo}>{item.IDSobreGrupo} </Text>
-            <Text style={commonStyles.campoCodigo2}></Text>
-          </View>
-            <Pressable              
+          <Pressable              
               onPress={() => filtrarEIrACapitulos(item)}
             >
-             <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', color: '#192f6a' }}>{item.SobreGrupo}</Text>
-            </Pressable>
+            <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+              <Text style={[commonStyles.campoCodigo,{ color: '#192f6a'}]}>{item.IDSobreGrupo}  <Text style={{fontWeight:'400', color:'black'}}>{item.SobreGrupo}</Text></Text>
+            </View>
+            
+             </Pressable>
           
         </View>
       )}

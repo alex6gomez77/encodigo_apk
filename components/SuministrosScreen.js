@@ -15,7 +15,7 @@ import { AppText as Text } from './AppText';
 import ScreenHeader from './ScreenHeader';
 import { commonStyles } from '../styles/commonStyles';
 import { useSuministroSelection } from '../contexts/SuministroSelectionContext';
-import { contarSuministros, obtenerSuministros } from '../db/database';
+import { actualizarFiltro, contarSuministros, obtenerSuministros } from '../db/database';
 
 const PAGE_SIZE = 50;
 
@@ -44,6 +44,7 @@ export default function SuministrosScreen() {
         setSuministros(primeros);
         setTotal(cantidad);
         setOffset(primeros.length);
+       // await actualizarFiltro(db,'SM', '*', busqueda); //SM Suministros
       } catch (error) {
         if (!cancelado) {
           setErrorCarga(error.message);
@@ -53,6 +54,8 @@ export default function SuministrosScreen() {
     };
 
     cargar();
+
+    
     return () => {
       cancelado = true;
     };
@@ -140,7 +143,7 @@ export default function SuministrosScreen() {
           </Text>
         }
         ListFooterComponent={
-          cargandoMas ? <ActivityIndicator color="#4c669f" style={styles.loading} /> : null
+          cargandoMas ? <ActivityIndicator color="#4b86b4" style={styles.loading} /> : null
         }
       />
     </View>
@@ -182,7 +185,7 @@ const styles = StyleSheet.create({
   },
   supplyType: {
     flex: 1,
-    color: '#4c669f',
+    color: '#4b86b4',
     fontSize: 12,
     fontWeight: '700',
   },

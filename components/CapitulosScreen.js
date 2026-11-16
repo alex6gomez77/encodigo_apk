@@ -159,16 +159,15 @@ export default function CapitulosScreen() {
       data={capitulos}
       keyExtractor={(item) => item.IDGrupo.toString()}
       renderItem={({ item }) => (
-        <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>
-          <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
-            <Text style={commonStyles.campoCodigo}>{item.IDGrupo} </Text>
-            <Text style={commonStyles.campoCodigo2}> {item.SobreGrupo}   </Text>
-          </View>
-            <Pressable              
+        <View style={[commonStyles.detallesItemContainer]}>
+          <Pressable              
               onPress={() => filtrarEIrASubCapitulo(item)}
-            >
-             <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', color: '#192f6a' }}>{item.Grupo}</Text>
-            </Pressable>
+            >          
+            <Text style={commonStyles.campoCodigo2}>{item.SobreGrupo} </Text> 
+            <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+              <Text style={[commonStyles.campoCodigo,{ color: '#192f6a'}]}>{item.IDGrupo}  <Text style={{fontWeight:'400', color:'black'}}>{item.Grupo}</Text></Text>
+            </View>            
+          </Pressable>
           
         </View>
       )}

@@ -85,7 +85,7 @@ export const commonStyles = StyleSheet.create({
     },  
     gradienteBarraContainer: {
         alignItems: 'center',
-        backgroundColor: '#4c669f', // Fallback color
+        backgroundColor: '#4b86b4', // Fallback color
         borderRadius: 10,
         padding: 10,
         width: '100%',
@@ -163,8 +163,8 @@ export const commonStyles = StyleSheet.create({
             marginLeft: 10
         },
         buttonObraFlotante: {
-            width: 40,
-            height: 40,
+            width: 25,
+            height: 30,
             borderRadius: 5,
             alignItems: 'center',
             justifyContent: 'center',
@@ -173,12 +173,12 @@ export const commonStyles = StyleSheet.create({
         buttonFlotante: {
             flexDirection: 'row',
             alignItems: 'center',
-            borderRadius: 20,
+            borderRadius: 5,
             padding: 10,
             position: "absolute", 
             bottom: 40, 
             right: 60, 
-            backgroundColor: "#4c669f",
+            backgroundColor: "#4b86b4",
             width: 40,
             height: 40
         },
@@ -193,18 +193,16 @@ export const commonStyles = StyleSheet.create({
           height: 40
       },
         buttonFlotanteImportar: {
+            bottom: 85,
             flexDirection: 'row',
             alignItems: 'center',
-          //  borderWidth: 1,
-           // borderColor: '#192f6a',
-            borderRadius: 20,
-            padding: 7,
+            borderRadius: 5,
+            padding: 10,
             position: "absolute", 
-            bottom: 85, 
-            right: 67, 
-           // backgroundColor: "#192f6a",
-            width: 30,
-            height: 30
+            right: 60, 
+            backgroundColor: "#4b86b4",
+            width: 40,
+            height: 40
         },
         buttonFlotantePartida: {
             flexDirection: 'row',
@@ -216,7 +214,7 @@ export const commonStyles = StyleSheet.create({
             position: "absolute", 
             top: 35, 
             right: 7, 
-            backgroundColor: "#4c669f",
+            backgroundColor: "#4b86b4",
         },
          fondoFlotantePartida: {
             flexDirection: 'row',
@@ -279,7 +277,7 @@ export const commonStyles = StyleSheet.create({
             marginBottom: 4,
         },
         actividadItemButton: {
-            backgroundColor: '#4c669f',
+            backgroundColor: '#4b86b4',
             padding: 8,
             borderRadius: 5,
             alignItems: 'center',
@@ -291,7 +289,7 @@ export const commonStyles = StyleSheet.create({
         },
         gradienteResumenContainer: {
             alignItems: 'center',
-            backgroundColor: '#4c669f', // Fallback color
+            backgroundColor: '#4b86b4', // Fallback color
             borderRadius: 10,
             padding: 10,
             width: '30%',
@@ -351,7 +349,7 @@ export const commonStyles = StyleSheet.create({
     position: 'absolute',
     right: 10,
     top: 0,
-    backgroundColor: '#4c669f',
+    backgroundColor: '#4b86b4',
     borderEndEndRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 4,
@@ -382,7 +380,7 @@ export const commonStyles = StyleSheet.create({
     position: 'absolute',
     right: 10,
     top: 0,
-    backgroundColor: '#4b86b4',
+    backgroundColor: '#acd0ec',
     borderEndEndRadius: 5,
     borderBottomStartRadius: 5,
     paddingHorizontal: 12,
@@ -522,14 +520,15 @@ export const commonStyles = StyleSheet.create({
   },
 
    campoCodigo: { 
-    fontSize: 16,
+    fontSize: 14,
     marginBottom: 5 ,
     fontWeight: 'bold',
+    fontFamily: 'FiraSans_400Regular'
 
   },
   campoCodigo2: { 
     fontSize: 12,
-    marginBottom: 5 ,
+   // marginBottom: 5 ,
   },
 
   buttonAgregar: {

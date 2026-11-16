@@ -161,17 +161,15 @@ export default function SubCapitulosScreen() {
       data={subcapitulos}
       keyExtractor={(item) => item.IDSubGrupo.toString()}
       renderItem={({ item }) => (
-        <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 3 }}>
-            <Text style={commonStyles.campoCodigo}>{item.IDSubGrupo} </Text>
-            <Text style={commonStyles.campoCodigo2}> {item.SobreGrupo}  | {item.Grupo} </Text>
-          </View>
-            <Pressable              
-              onPress={() => filtrarEIrARenglones(item)}
-            >
-             <Text style={{ fontSize: 14, fontFamily: 'FiraSans_400Regular', fontWeight: 'bold', color: '#192f6a' }}>{item.SubGrupo}</Text>
-            </Pressable>
-          
+        <View style={[commonStyles.detallesItemContainer, {paddingVertical: 0}]}>  
+          <Pressable              
+            onPress={() => filtrarEIrARenglones(item)}
+          >          
+            <Text style={commonStyles.campoCodigo2}>{item.SobreGrupo}  | {item.Grupo} </Text> 
+            <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+              <Text style={[commonStyles.campoCodigo,{ color: '#192f6a'}]}>{item.IDSubGrupo}  <Text style={{fontWeight:'400', color:'black'}}>{item.SubGrupo}</Text></Text>
+            </View>            
+          </Pressable>          
         </View>
       )}
       onEndReached={cargarMas}

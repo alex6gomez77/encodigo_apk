@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText as Text } from './AppText';
 import ScreenHeader from './ScreenHeader';
 import { commonStyles } from '../styles/commonStyles';
+import Checkbox from 'expo-checkbox';
 import { obtenerDetallesDelRenglon, obtenerRenglonPorId } from '../db/database';
 import AgregarRenglonObraModal from './AgregarRenglonObraModal';
 import { useSuministroSelection } from '../contexts/SuministroSelectionContext';
@@ -28,6 +29,7 @@ export default function DetalleRenglonScreen() {
   const [detalles, setDetalles] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState('');
+  const [conMateriales, setConMateriales] = useState(true);
   const [agregarVisible, setAgregarVisible] = useState(false);
   const renglonId = Array.isArray(id) ? id[0] : id;
 
@@ -76,7 +78,7 @@ export default function DetalleRenglonScreen() {
     <View style={styles.container}>
       <ScreenHeader title="DETALLES DEL RENGLÓN" onBack={() => router.back()} />
       {cargando ? (
-        <ActivityIndicator color="#4c669f" style={styles.loading} />
+        <ActivityIndicator color="#4b86b4" style={styles.loading} />
       ) : errorCarga ? (
         <Text style={styles.message}>{errorCarga}</Text>
       ) : renglon ? (
@@ -87,33 +89,43 @@ export default function DetalleRenglonScreen() {
 
               <View style={styles.renglonInfo}>
               <Text style={styles.hierarchyText}>
-                {renglon?.IDSobreGrupo ?? '—'} {renglon?.SobreGrupo || 'Sin sección'}
-              </Text>
-              <Text style={styles.hierarchyText}>
-                {renglon?.IDGrupo ?? '—'} {renglon?.Grupo || 'Sin capítulo'}
-              </Text>
-              <Text style={styles.hierarchyText}>
-                {renglon?.IDSubGrupo ?? '—'} {renglon?.SubGrupo || 'Sin subcapítulo'}
-              </Text>
-               
-
+                {renglon?.SobreGrupo || 'Sin sección'} | {renglon?.Grupo || 'Sin capítulo'} | {renglon?.SubGrupo || 'Sin subcapítulo'}
+              </Text> 
               <View style={styles.renglonTitle}>
-                              <Text style={[commonStyles.renglonName, {fontWeight: 'bold'}]} 
-                              numberOfLines={3} 
-                              ellipsizeMode="tail"
-                              >
-                                {renglon?.IDRVariante} <Text style={{fontWeight: '500'}}>{renglon?.RVariante}</Text>
-                              </Text>
-                            </View>          
+                <Text style={[commonStyles.renglonName, {fontWeight: 'bold'}]} 
+                numberOfLines={3} 
+                ellipsizeMode="tail"
+                >
+                  {renglon?.IDRVariante} <Text style={{fontWeight: '500'}}>{renglon?.RVariante}</Text>
+                </Text>
+              </View>          
             </View>
-
 
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Precio</Text>
                 <Text style={styles.summaryValue}>
-                  ${renglon.Precio ?? ''} x {renglon.umedicion ?? ''}
+                  { conMateriales ?
+                  `${Number(renglon.Precio ?? 0).toFixed(2)} `
+                :
+                    `${Number(renglon.CDManoObra + renglon.CDUsoEquipos ?? 0).toFixed(2)} `
+                }
+                 x {renglon.umedicion ?? ''}
+                  
                 </Text>
+                <View style={styles.checkboxRow}>
+                  <Checkbox
+                    value={conMateriales}
+                    onValueChange={setConMateriales}
+                    color={conMateriales ? '#192f6a' : undefined}
+                    accessibilityLabel="con Materiales"
+                    style={{ width: 12, height: 12 }}
+                  />
+                  <Pressable onPress={() => setConMateriales(value => !value)}>
+                    <Text style={styles.checkboxLabel}>Incluyendo los Materiales</Text>
+                  </Pressable>
+                </View>
               </View>
+              
               <View style={styles.summaryGrid}>
                 {resumenRenglon.map(([label, field, isCost]) => (
                   <View key={field} style={styles.summaryItem}>
@@ -126,6 +138,7 @@ export default function DetalleRenglonScreen() {
                   </View>
                 ))}
               </View>
+              
             </View>
 
             <Text style={styles.compositionTitle}>
@@ -139,8 +152,11 @@ export default function DetalleRenglonScreen() {
                 <Text style={styles.resourceType}>{item.tiporecurso}</Text>
                 <Text style={styles.resourceName}>{item.Recurso}</Text>
                 <Text style={styles.resourceDetails}>
-                  {item.Peso ? `Precio: $${item.Precio} | ` : ''}
-                  Norma: {item.Norma} x {item.umedicion}
+                  {item.Precio ? `Precio: $${Number(item.Precio?? 0).toFixed(2)} | ` : ''}
+
+
+                 
+                  Norma: {Number(item.Norma?? 0).toFixed(4)} x {item.umedicion}
                   {item.Peso ? ` | Peso: ${item.Peso} kg` : ''}
                   {' | '}Código: {item.IDRecurso}
                 </Text>
@@ -179,7 +195,7 @@ export default function DetalleRenglonScreen() {
                 <FontAwesome5
                   name={selectedSuministro ? 'exchange-alt' : 'search'}
                   size={16}
-                  color="#4c669f"
+                  color="#4b86b4"
                 />
                 <Text style={styles.supplyPickerText}>
                   {selectedSuministro?.Recurso || 'Seleccionar suministro'}
@@ -209,6 +225,7 @@ export default function DetalleRenglonScreen() {
             renglon={renglon}
             visible={agregarVisible}
             onClose={setAgregarVisible}
+            conMateriales={conMateriales}
           />
         </>
       ) : null}
@@ -240,6 +257,11 @@ const styles = StyleSheet.create({
   renglonTitleBlock: {
     flex: 1,
     flexShrink: 1,
+  },
+  hierarchyText: {
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 14,
   },
   renglonHierarchyInlineRow: {
     flexDirection: 'row',
@@ -278,9 +300,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ebf8fd',
     borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    marginTop: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    marginTop: 2,
   },
   summaryLabel: {
     textAlign: 'center',
@@ -381,5 +403,14 @@ const styles = StyleSheet.create({
   },
   loading: {
     marginVertical: 20,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkboxLabel: {
+    fontSize: 12,
+    flexShrink: 1,
   },
 });

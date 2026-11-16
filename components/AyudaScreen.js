@@ -238,6 +238,6 @@ const styles = StyleSheet.create({
   versionTitle: {
     fontWeight: "bold",
     marginTop: 10,
-    color: "#4c669f",
+    color: "#4b86b4",
   },
 });

@@ -116,7 +116,7 @@ export default function PrincipalScreen() {
               numberOfLines={1}
               minimumFontScale={0.6}
             >
-                Generales
+                Configuración
               </Text>
               <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
                  
@@ -129,11 +129,11 @@ export default function PrincipalScreen() {
        
         <View style={{ display: 'flex',   flexDirection: 'row', justifyContent: 'space-between'}}>
           <LinearGradient          
-          colors={['#f2f2f2',  '#abcdf3']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradienteResumenContainer}
-        >
+            colors={['#f2f2f2',  '#abcdf3']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradienteResumenContainer}
+          >
           <Link href="/Secciones" asChild>
             <Pressable style={{alignItems: 'center'}} >
               <FontAwesome5 name="th-large" size={30} color="#192f6a" />
