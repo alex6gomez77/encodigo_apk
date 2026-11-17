@@ -114,9 +114,10 @@ export default function DetalleRenglonScreen() {
                 :
                     `${Number(renglon.CDManoObra + renglon.CDUsoEquipos ?? 0).toFixed(2)} `
                 }
-                 x {renglon.umedicion ?? ''}
-                  
+                 x {renglon.umedicion ?? ''} 
+                   
                 </Text>
+                
                 <View style={styles.checkboxRow}>
                   <Checkbox
                     value={conMateriales}
@@ -124,22 +125,24 @@ export default function DetalleRenglonScreen() {
                     color={conMateriales ? '#192f6a' : undefined}
                     accessibilityLabel="con Materiales"
                     style={{ width: 12, height: 12 }}
-                  />
+                  />                  
                   <Pressable onPress={() => setConMateriales(value => !value)}>
                     <Text style={styles.checkboxLabel}>Incluyendo los Materiales</Text>
                   </Pressable>
                 </View>
+                <Text style={styles.checkboxLabel}>Perfil salarial: {renglon.perfilsalarial_id ?? 1}</Text>
+                
               </View>
               
               <View style={styles.summaryGrid}>
                 {resumenRenglon.map(([label, field, isCost]) => (
                   <View key={field} style={styles.summaryItem}>
                     <Text style={styles.summaryLabel}>{label}</Text>
-                    <Text style={styles.summaryValue}>
-                      {renglon[field]
-                        ? `${isCost ? '$' : ''}${renglon[field]}`
-                        : ''}
-                    </Text>
+                     <Text style={styles.summaryValue}>
+                       {renglon[field]
+                         ? `${isCost ? '$' : ''}${renglon[field]}${field === 'CDManoObra' ? ` X ${renglon.perfilsalarial_id ?? '1'}` : ''}`
+                         : ''}
+                     </Text>
                   </View>
                 ))}
               </View>
@@ -154,16 +157,15 @@ export default function DetalleRenglonScreen() {
                 key={`${item.IDRecurso ?? 'recurso'}-${index}`}
                 style={styles.compositionItem}
               >
-                <Text style={styles.resourceType}>{item.tiporecurso}</Text>
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0, justifyContent: 'space-between'}}>
+                  <Text style={styles.resourceType}>{item.tiporecurso}</Text>
+                  <Text style={{fontSize: 10}}> {item.IDRecurso}</Text>
+                </View>
                 <Text style={styles.resourceName}>{item.Recurso}</Text>
                 <Text style={styles.resourceDetails}>
-                  {item.Precio ? `Precio: $${Number(item.Precio?? 0).toFixed(2)} | ` : ''}
-
-
-                 
+                  {item.Precio ? `Precio: $${Number(item.Precio?? 0).toFixed(2)} | ` : ''}                 
                   Norma: {Number(item.Norma?? 0).toFixed(4)} x {item.umedicion}
                   {item.Peso ? ` | Peso: ${item.Peso} kg` : ''}
-                  {' | '}Código: {item.IDRecurso}
                 </Text>
               </View>
             )) : (
@@ -210,7 +212,7 @@ export default function DetalleRenglonScreen() {
               {selectedSuministro && (
                 <>
                   <Text style={styles.supplyDetails}>
-                    {`Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} | Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)}`}
+                    {`Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'} | Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'}`}
                   </Text>
                   
                 </>
@@ -259,7 +261,7 @@ const styles = StyleSheet.create({
   },
   hierarchyText: {
     color: '#555',
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 14,
   },
   renglonHierarchyInlineRow: {
@@ -373,7 +375,7 @@ const styles = StyleSheet.create({
   },
   resourceName: {
     fontSize: 14,
-    marginBottom: 5,
+    marginBottom: 0,
   },
   resourceDetails: {
     flexShrink: 1,
@@ -404,6 +406,11 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  perfilSalarial: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

@@ -123,7 +123,7 @@ export default function Layout() {
       <SQLiteProvider
         databaseName="database.db"
         assetSource={{ assetId: require('../assets/database.db') }}
-       // onInit={migrarObras}
+        onInit={migrarObras}
       >
         <LicenciaProvider>
           <View

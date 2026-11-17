@@ -157,14 +157,15 @@ export const obtenerRenglonesFiltrados = async (db, tablaId, limite = 50, offset
 
 export const obtenerRenglonPorId = (db, id) => {
 return db.getFirstAsync(
-  `SELECT rvariantes.*,
-          subgrupos.IDGrupo AS IDGrupo,
-          subgrupos.SubGrupo,
-          grupos.IDSobreGrupo AS IDSobreGrupo,
-          grupos.Grupo,
-          sobregrupos.SobreGrupo,
-          unidadesmedidas.umedicion
-   FROM rvariantes
+   `SELECT rvariantes.*,
+           subgrupos.IDGrupo AS IDGrupo,
+           subgrupos.SubGrupo,
+           grupos.IDSobreGrupo AS IDSobreGrupo,
+           grupos.Grupo,
+           sobregrupos.SobreGrupo,
+           unidadesmedidas.umedicion,
+           (SELECT obras.perfilsalarial_id FROM obras LEFT JOIN generales ON generales.obra_activa = obras.id LIMIT 1) AS perfilsalarial_id
+    FROM rvariantes
    LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
    LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
    LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
@@ -456,6 +457,7 @@ const columnasObra = [
   ['aprobadopor_id', 'INTEGER'],
   ['actividadtipo_id', 'INTEGER'],
   ['user_id', 'INTEGER NOT NULL DEFAULT 1'],
+  ['perfilsalarial_id', 'INTEGER'],
 ];
 
 const tablasObraAnteriores = [
@@ -527,11 +529,51 @@ export const migrarObras = async (db) => {
       }
     }
 
-    const columnasExistentes = await db.getAllAsync('PRAGMA table_info(obras)');
+const columnasExistentes = await db.getAllAsync('PRAGMA table_info(obras)');
     const nombresExistentes = new Set(columnasExistentes.map(({ name }) => name));
     const columnasPendientes = columnasObra.filter(([nombre]) => !nombresExistentes.has(nombre));
     for (const [nombre, tipo] of columnasPendientes) {
       await db.execAsync(`ALTER TABLE obras ADD COLUMN ${nombre} ${tipo}`);
+    }
+
+    // Crear tabla perfilsalarial si no existe
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS perfilsalarial (
+        IDPerfilSalarial INTEGER PRIMARY KEY,
+        PerfilSalarial TEXT,
+        Incremento REAL,
+        AplicarPagosAdicionales INTEGER,
+        Activo INTEGER
+      )
+    `);
+    // Insertar datos por defecto si la tabla está vacía
+    const count = await db.getFirstAsync('SELECT COUNT(*) as total FROM perfilsalarial');
+    if (!count || count.total === 0) {
+      const rows = [
+        [0, 'SIN INCREMENTO DE LA TARIFA SALARIAL VIGENTE', 1, 1, 1],
+        [1, 'INCREMENTO DE HASTA 1.5 VEZ LA TARIFA SALARIAL', 1.5, 1, 1],
+        [2, 'INCREMENTO DE HASTA 2 VECES LA TARIFA SALARIAL', 2, 1, 1],
+        [3, 'INCREMENTO DE HASTA 2.5 VECES LA TARIFA SALARIAL', 2.5, 1, 1],
+        [4, 'INCREMENTO DE HASTA 3 VECES LA TARIFA SALARIAL', 3, 1, 1],
+        [5, 'INCREMENTO DE HASTA 4 VECES LA TARIFA SALARIAL', 4, 1, 1],
+        [6, 'INCREMENTO MÁXIMO DE 5 VECES LA TARIFA SALARIAL', 5, 1, 1],
+      ];
+      for (const r of rows) {
+        await db.runAsync(
+          'INSERT OR IGNORE INTO perfilsalarial (IDPerfilSalarial, PerfilSalarial, Incremento, AplicarPagosAdicionales, Activo) VALUES (?,?,?,?,?)',
+          r[0], r[1], r[2], r[3], r[4]
+        );
+      }
+    }
+    const tablaListadodecantidades = await db.getFirstAsync(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'listadodecantidades'"
+    );
+    if (tablaListadodecantidades) {
+      const columnasListadode = await db.getAllAsync('PRAGMA table_info(listadodecantidades)');
+      const nombresListadode = new Set(columnasListadode.map(({ name }) => name));
+      if (!nombresListadode.has('orden')) {
+        await db.execAsync('ALTER TABLE listadodecantidades ADD COLUMN orden INTEGER DEFAULT 0');
+      }
     }
 
     await db.runAsync("UPDATE obras SET identidad = 'obra' WHERE identidad = 'servicio'");
@@ -660,13 +702,23 @@ export const agregarRCalObra = async (
   IDRecurso = null,
   um, 
   descripcion,
-  conMateriales
+  conMateriales,
+  orden = null
 ) => {
+  // Si no se proporciona orden, calcular el siguiente disponible
+  if (orden === null) {
+    const maxOrderResult = await db.getFirstAsync(
+      'SELECT MAX(orden) as max_orden FROM listadodecantidades WHERE obra_id = ? AND objetodeobra_id = ?',
+      [obra_id, objetodeobra_id]
+    );
+    orden = (maxOrderResult?.max_orden ?? 0) + 1;
+  }
+
   return db.runAsync(
     `INSERT INTO listadodecantidades
-      (obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa, um, descripcion, cm)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa, um, descripcion, conMateriales
+      (obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa, um, descripcion, cm, orden)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    obra_id, objetodeobra_id, IDRVariante, cantidad, precio, observaciones, IDRecurso, IDSubEtapa, um, descripcion, conMateriales, orden
   );
 }
 
@@ -680,6 +732,7 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
             listadodecantidades.precio,
             listadodecantidades.observaciones,
             listadodecantidades.um,
+            listadodecantidades.orden,
             COALESCE(recursos.IDRecurso, listadodecantidades.IDRecurso) AS IDRecurso,
             objetosdeobras.objetodeobra,
             rvariantes.RVariante,
@@ -688,26 +741,28 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
             recursos.Recurso AS suministro_nombre,
             recursotipos.tiporecurso AS suministro_tipo,
             suministro_unidades.umedicion AS suministro_unidad,
-            recursos.Precio AS suministro_precio,
-            sobregrupos.SobreGrupo,
-            subetapas.SubEtapa,
-            grupos.Grupo,
-            subgrupos.SubGrupo
-     FROM listadodecantidades
-     LEFT JOIN objetosdeobras ON objetosdeobras.id = listadodecantidades.objetodeobra_id
-     LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
-     LEFT JOIN unidadesmedidas ON unidadesmedidas.um = rvariantes.UM
-     LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
-     LEFT JOIN subetapas ON subetapas.IDSubEtapa = listadodecantidades.IDSubEtapa
-     LEFT JOIN recursotipos ON recursotipos.idtiporecurso = recursos.Tipo
-     LEFT JOIN unidadesmedidas AS suministro_unidades ON suministro_unidades.um = recursos.UM
-     LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
-     LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
-     LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
+             recursos.Precio AS suministro_precio,
+             sobregrupos.SobreGrupo,
+             subetapas.SubEtapa,
+             grupos.Grupo,
+             subgrupos.SubGrupo,
+             obras.perfilsalarial_id
+      FROM listadodecantidades
+      LEFT JOIN objetosdeobras ON objetosdeobras.id = listadodecantidades.objetodeobra_id
+      LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
+      LEFT JOIN unidadesmedidas ON unidadesmedidas.um = rvariantes.UM
+      LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
+      LEFT JOIN subetapas ON subetapas.IDSubEtapa = listadodecantidades.IDSubEtapa
+      LEFT JOIN recursotipos ON recursotipos.idtiporecurso = recursos.tipo
+      LEFT JOIN unidadesmedidas AS suministro_unidades ON suministro_unidades.um = recursos.UM
+      LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
+      LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
+      LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
+      LEFT JOIN obras ON obras.id = listadodecantidades.obra_id
      WHERE listadodecantidades.obra_id = ?
      ORDER BY 
               listadodecantidades.objetodeobra_id ASC,
-              listadodecantidades.IDRVariante ASC,
+              COALESCE(listadodecantidades.orden, 999999) ASC,
               listadodecantidades.rowid ASC`,
     obraId
   );
@@ -729,6 +784,31 @@ export const eliminarRenglonAsignado = (db, obraId, asignacionId) => {
     obraId,
     asignacionId
   );
+};
+
+// Función para actualizar el orden de un renglón
+export const actualizarOrdenRenglon = (db, renglonId, nuevoOrden) => {
+  return db.runAsync(
+    `UPDATE listadodecantidades
+     SET orden = ?
+     WHERE id = ?`,
+    [nuevoOrden, renglonId]
+  );
+};
+
+// Función para reordenar múltiples renglones de una vez
+export const reordenarRenglones = async (db, obraId, renglonesOrdenados) => {
+  // renglonesOrdenados es un array de objetos { id, orden }
+  await db.withTransactionAsync(async () => {
+    for (const { id, orden } of renglonesOrdenados) {
+      await db.runAsync(
+        `UPDATE listadodecantidades
+         SET orden = ?
+         WHERE id = ? AND obra_id = ?`,
+        [orden, id, obraId]
+      );
+    }
+  });
 };
 
 

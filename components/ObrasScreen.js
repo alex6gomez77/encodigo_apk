@@ -47,6 +47,7 @@ export default function ObrasScreen() {
   const [duplicarFormData, setDuplicarFormData] = useState({ codigo: '', obra: '' });
   const [obraADuplicar, setObraADuplicar] = useState(null);
   const [clientes, setClientes] = useState([]);
+  const [perfilsalariales, setPerfilsalariales] = useState([]);
   const [showLicenseAlert, setShowLicenseAlert] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hayMas, setHayMas] = useState(true);
@@ -104,15 +105,28 @@ export default function ObrasScreen() {
     }
   }, [db]);
 
+  const loadPerfiles = useCallback(async (estaActiva = () => true) => {
+    try {
+      const lista = await db.getAllAsync('SELECT * FROM perfilsalarial ORDER BY IDPerfilSalarial');
+      if (!estaActiva()) return;
+      setPerfilsalariales(lista);
+    } catch (error) {
+      if (estaActiva()) {
+        const detalle = error instanceof Error ? error.message : String(error);
+        Alert.alert('Error', `No se pudieron cargar los perfiles salariales. ${detalle}`);
+      }
+    }
+  }, [db]);
   useFocusEffect(
     useCallback(() => {
       let estaActiva = true;
       cargarInicial(() => estaActiva);
       loadClientes(() => estaActiva);
+      loadPerfiles(() => estaActiva);
       return () => {
         estaActiva = false;
       };
-    }, [cargarInicial, loadClientes])
+    }, [cargarInicial, loadClientes, loadPerfiles])
   );
 
   useEffect(() => {
@@ -259,6 +273,7 @@ export default function ObrasScreen() {
     p100gastos: '1',
     p100impuestosft: '5',
     p100osde: '',
+    perfilsalarial_id: '',
     observaciones: '',
   };
 
@@ -359,14 +374,16 @@ export default function ObrasScreen() {
         clienteId,
         formData.observaciones.trim(),
         'ax6',
-        ...valoresNumericos
+        ...valoresNumericos,
+        formData.perfilsalarial_id ? Number(formData.perfilsalarial_id) : null,
       ];
- 
+  
       if (editarId != null) {
         await db.runAsync(
           `UPDATE obras SET
              codigo = ?, obra = ?, cliente_id = ?,observaciones = ?, autor = ?, p100utilidades = ?, p100impuestos = ?,
-               p100vacaciones = ?, p100contribuciones = ?, p100gastos = ?, p100impuestosft = ?, p100osde = ?
+               p100vacaciones = ?, p100contribuciones = ?, p100gastos = ?, p100impuestosft = ?, p100osde = ?,
+               perfilsalarial_id = ?
            WHERE id = ?`,
           ...parametros,
           editarId
@@ -378,9 +395,10 @@ export default function ObrasScreen() {
           const result = await db.runAsync(
             `INSERT INTO obras
               (codigo, obra, cliente_id, observaciones, autor, p100utilidades, p100impuestos,
-               p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, p100osde
+               p100vacaciones, p100contribuciones, p100gastos, p100impuestosft, p100osde,
+               perfilsalarial_id
                 )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             ...parametros
           );
           obraId = result.lastInsertRowId;
@@ -417,6 +435,7 @@ export default function ObrasScreen() {
       p100gastos: String(obra.p100gastos ?? 1),
       p100impuestosft: String(obra.p100impuestosft ?? 5),
       p100osde: obra.p100osde == null ? '' : String(obra.p100osde),      
+      perfilsalarial_id: obra.perfilsalarial_id == null ? '' : String(obra.perfilsalarial_id),
       observaciones: obra.observaciones ?? '',
     });
     setEditarId(obra.id);
@@ -1797,6 +1816,18 @@ export default function ObrasScreen() {
               ))}
             </Picker>          
           </View>
+
+          <Text style={styles.label}>Perfil Salarial</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={formData.perfilsalarial_id}
+              onValueChange={value => handleChange('perfilsalarial_id', value)}
+            >
+              {perfilsalariales.map(p => (
+                <Picker.Item key={p.IDPerfilSalarial} label={p.PerfilSalarial} value={String(p.IDPerfilSalarial)} />
+              ))}
+            </Picker>
+          </View>
           
           
           {/* Campos porcentuales y otros */}
@@ -2068,3 +2099,19 @@ const styles = StyleSheet.create({
     color: '#666',
   },
 });
+
+
+
+/*
+IDPerfilSalarial	PerfilSalarial	Incremento	AplicarPagosAdicionales	Activo
+0	SIN INCREMENTO DE LA TARIFA SALARIAL VIGENTE	1	1	1
+1	INCREMENTO DE HASTA 1.5 VEZ LA TARIFA SALARIAL	1,5	1	1
+2	INCREMENTO DE HASTA 2 VECES LA TARIFA SALARIAL	2	1	1
+3	INCREMENTO DE HASTA 2.5 VECES LA TARIFA SALARIAL	2,5	1	1
+4	INCREMENTO DE HASTA 3 VECES LA TARIFA SALARIAL	3	1	1
+5	INCREMENTO DE HASTA 4 VECES LA TARIFA SALARIAL	4	1	1
+6	INCREMENTO MÁXIMO DE 5 VECES LA TARIFA SALARIAL	5	1	1
+
+
+
+*/

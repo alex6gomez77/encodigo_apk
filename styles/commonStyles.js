@@ -527,7 +527,7 @@ export const commonStyles = StyleSheet.create({
 
   },
   campoCodigo2: { 
-    fontSize: 12,
+    fontSize: 10,
    // marginBottom: 5 ,
   },
 

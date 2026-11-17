@@ -204,8 +204,8 @@ export default function AgregarRenglonObraModal({ renglon, visible, onClose, con
               <FontAwesome5 style={styles.backIcon} name="arrow-left" size={20} color="#192f6a" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text>AGREGANDO RENGLÓN A LA OBRA</Text>
-              {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}
+              <Text>AGREGANDO RENGLÓN A LA OBRA x</Text>
+              Obra: {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}
             </View>
           </View>
 
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   },
   hierarchyText: {
     color: '#555',
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 14,
   },
   renglonTitle: {

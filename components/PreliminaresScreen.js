@@ -7,13 +7,13 @@ import {
   Alert,
   ScrollView,
   TouchableOpacity,
-  FlatList,
   Modal,
   Platform,
   Image,
   Pressable,
 } from 'react-native';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
+import DraggableFlatList from 'react-native-draggable-flatlist';
 import { AppText as Text, AppTextInput as TextInput, AppPicker as Picker } from './AppText';
 
 import { commonStyles } from '../styles/commonStyles.js';
@@ -37,6 +37,8 @@ import {
   obtenerRenglonesAsignados,
   eliminarObjetosDeLaObra,
   eliminarRenglonAsignado,
+  actualizarOrdenRenglon,
+  reordenarRenglones,
 } from '../db/database.js';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -57,6 +59,7 @@ export default function PreliminaresScreen() {
   const [laObra, setLaObra] = useState({});
   const [renglones, setRenglones] = useState([]);
   const [renglonesAsignados, setRenglonesAsignados] = useState([]);
+  const [renglonesOrdenados, setRenglonesOrdenados] = useState([]);
   const [offset, setOffset] = useState(0);
   const [cargando, setCargando] = useState(false);
   const [hayMas, setHayMas] = useState(true);
@@ -65,14 +68,14 @@ export default function PreliminaresScreen() {
   const [cadenafiltro, setCadenafiltro] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalDetalleVisible, setModalDetalleVisible] = useState(false);
-  const [modalAgregarAObraVisible, setModalAgregarAObraVisible] = useState(false);
+  const [modalagregarAObraVisible, setModalagregarAObraVisible] = useState(false);
   const [exportacionVisible, setExportacionVisible] = useState(false);
   const [exportando, setExportando] = useState(false);
-  const [exportacionMensaje, setExportacionMensaje] = useState('');
+  const [exportacionmensaje, setExportacionmensaje] = useState('');
   const [exportacionError, setExportacionError] = useState('');
   const [objetoExportando, setObjetoExportando] = useState(null);
   const [importando, setImportando] = useState(false);
-  const [importacionMensaje, setImportacionMensaje] = useState('');
+  const [importacionmensaje, setImportacionmensaje] = useState('');
   const [importacionError, setImportacionError] = useState('');
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [objetoImportando, setObjetoImportando] = useState(null);
@@ -83,23 +86,49 @@ export default function PreliminaresScreen() {
   const [obra_id, setObra_id] = useState(null);
   const [objetosdeobras, setObjetosdeobras] = useState(null);
   const [objetodeobra_id, setObjetodeobra_id] = useState(null);
-  const [cantidad, setCantidad] = useState('1');
+  const [cantidad, setcantidad] = useState('1');
+  const [ordenCambiado, setOrdenCambiado] = useState(false);
   const filtroRef = useRef(null);
 
-  const totalesPorObjeto = useMemo(() => {
-    const totales = new Map();
-    for (const renglon of renglonesAsignados) {
-      const objetoId = String(renglon.objetodeobra_id ?? 'default');
-      const costo = Number(renglon.precio ?? 0) * Number(renglon.cantidad ?? 0);
-      totales.set(objetoId, (totales.get(objetoId) ?? 0) + costo);
+  const handleReordenarRenglones = async (nuevosRenglones) => {
+    try {
+      setRenglonesOrdenados(nuevosRenglones);
+      setOrdenCambiado(true);
+      
+      // Actualizar órdenes en la base de datos
+      const actualizaciones = nuevosRenglones.map((renglon, index) => ({
+        id: renglon.asignacion_id,
+        orden: index + 1
+      }));
+      
+      await reordenarRenglones(db, idObra, actualizaciones);
+      
+      // Recargar los renglones asignados
+      const actualizados = await obtenerRenglonesAsignados(db, idObra);
+      setRenglonesAsignados(actualizados);
+      setRenglonesOrdenados(actualizados);
+      setOrdenCambiado(false);
+      
+      Alert.alert('Éxito', 'Orden de renglones actualizado correctamente.');
+    } catch (error) {
+      setOrdenCambiado(false);
+      Alert.alert('Error', 'No se pudo actualizar el orden de los renglones.');
     }
-    return totales;
-  }, [renglonesAsignados]);
+  };
 
-  const costoTotalObra = useMemo(
-    () => [...totalesPorObjeto.values()].reduce((total, costo) => total + costo, 0),
-    [totalesPorObjeto]
-  );
+  const handleRevertirOrden = async () => {
+    try {
+      setOrdenCambiado(true);
+      const actualizados = await obtenerRenglonesAsignados(db, idObra);
+      setRenglonesAsignados(actualizados);
+      setRenglonesOrdenados(actualizados);
+      setOrdenCambiado(false);
+      Alert.alert('Éxito', 'Orden revertido al original.');
+    } catch (error) {
+      setOrdenCambiado(false);
+      Alert.alert('Error', 'No se pudo revertir el orden.');
+    }
+  };
 
   const cargarInicial = useCallback(
     async (estaActiva = () => true) => {
@@ -1266,7 +1295,7 @@ export default function PreliminaresScreen() {
                   }}
                 >
                   Precio: ${Number(elementoSeleccionado.Precio ?? 0).toFixed(2)} x{' '}
-                  {elementoSeleccionado.umedicion}
+                  {elementoSeleccionado.umedicion} (Perfil salarial: {elementoSeleccionado.perfilsalarial_id ?? 'N/A'})
                 </Text>
 
                 <View style={styles.resumenContainer2}>
@@ -1311,7 +1340,7 @@ export default function PreliminaresScreen() {
                         adjustsFontSizeToFit
                         numberOfLines={1}
                       >
-                        ${Number(elementoSeleccionado.CDManoObra ?? 0).toFixed(2)}
+                        ${Number(elementoSeleccionado.CDManoObra ?? 0).toFixed(2)} (Perfil: {elementoSeleccionado.perfilsalarial_id ?? 'N/A'})
                       </Text>
                     </View>
                   </View>
@@ -1569,7 +1598,7 @@ export default function PreliminaresScreen() {
                   }}
                 >
                   Precio: ${Number(elementoSeleccionado.Precio ?? 0).toFixed(2)} x{' '}
-                  {elementoSeleccionado.umedicion}
+                  {elementoSeleccionado.umedicion} (Perfil salarial: {elementoSeleccionado.perfilsalarial_id ?? 'N/A'})
                 </Text>
               </View>
             ) : null}

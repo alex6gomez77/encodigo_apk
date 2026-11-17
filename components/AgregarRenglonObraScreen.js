@@ -235,10 +235,13 @@ export default function AgregarRenglonObraScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title={`AGREGANDO RENGLÓN A LA OBRA${obraNombre ? ' · ' + obraNombre.toUpperCase() : ''}`}
+        title={`AGREGANDO RENGLÓN A LA OBRA`}
         onBack={cerrar}
       />
-
+ 
+      <Text>{!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}</Text>
+               
+             
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
         <View style={styles.renglonInfo}>
           <Text style={styles.hierarchyText}>
