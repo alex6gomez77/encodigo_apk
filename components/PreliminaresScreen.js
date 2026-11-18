@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   Pressable,
+  FlatList,
 } from 'react-native';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import DraggableFlatList from 'react-native-draggable-flatlist';
@@ -59,6 +60,19 @@ export default function PreliminaresScreen() {
   const [laObra, setLaObra] = useState({});
   const [renglones, setRenglones] = useState([]);
   const [renglonesAsignados, setRenglonesAsignados] = useState([]);
+  const totalesPorObjeto = useMemo(() => {
+    const totales = new Map();
+    for (const r of renglonesAsignados) {
+      const objetoId = r.objetodeobra_id;
+      const costo = (Number(r.precio ?? 0) * Number(r.cantidad ?? 0)) || 0;
+      totales.set(objetoId, (totales.get(objetoId) ?? 0) + costo);
+    }
+    return totales;
+  }, [renglonesAsignados]);
+  const costoTotalObra = useMemo(
+    () => [...totalesPorObjeto.values()].reduce((total, costo) => total + costo, 0),
+    [totalesPorObjeto]
+  );
   const [renglonesOrdenados, setRenglonesOrdenados] = useState([]);
   const [offset, setOffset] = useState(0);
   const [cargando, setCargando] = useState(false);
@@ -73,10 +87,12 @@ export default function PreliminaresScreen() {
   const [exportando, setExportando] = useState(false);
   const [exportacionmensaje, setExportacionmensaje] = useState('');
   const [exportacionError, setExportacionError] = useState('');
+  const [exportacionMensaje, setExportacionMensaje] = useState('');
   const [objetoExportando, setObjetoExportando] = useState(null);
   const [importando, setImportando] = useState(false);
   const [importacionmensaje, setImportacionmensaje] = useState('');
   const [importacionError, setImportacionError] = useState('');
+  const [importacionMensaje, setImportacionMensaje] = useState('');
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [objetoImportando, setObjetoImportando] = useState(null);
   const [filtroVisible, setFiltroVisible] = useState(false);
@@ -1519,7 +1535,7 @@ export default function PreliminaresScreen() {
 
       {/* ===== MODAL AGREGAR A OBRA ===== */}
       <Modal
-        visible={modalAgregarAObraVisible}
+        visible={modalagregarAObraVisible}
         animationType="slide"
         transparent={true}
         onRequestClose={handleCancelarAgregandoAObra}
