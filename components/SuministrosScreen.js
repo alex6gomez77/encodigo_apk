@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { AppText as Text } from './AppText';
@@ -19,9 +19,20 @@ import { actualizarFiltro, contarSuministros, obtenerSuministros } from '../db/d
 
 const PAGE_SIZE = 50;
 
+const TIPOS = [
+  { id: '1', label: 'Materiales' },
+  { id: '2', label: 'Tarifas MO' },
+  { id: '3', label: 'Costos Equipos' },
+  { id: 'E', label: 'Normas Equipos' },
+  { id: 'J', label: 'Juegos Productos' },
+  { id: 'N', label: 'Normas MO' },
+  { id: 'S', label: 'Semielaborados' },
+];
+
 export default function SuministrosScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { setSelectedSuministro } = useSuministroSelection();
   const [suministros, setSuministros] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -29,6 +40,15 @@ export default function SuministrosScreen() {
   const [offset, setOffset] = useState(0);
   const [cargandoMas, setCargandoMas] = useState(false);
   const [errorCarga, setErrorCarga] = useState('');
+  const [selectedTipos, setSelectedTipos] = useState(TIPOS.map(t => t.id));
+
+  useEffect(() => {
+    if (params.soloMateriales === '1') {
+      setSelectedTipos(['1', 'S']);
+    } else {
+      setSelectedTipos(TIPOS.map(t => t.id));
+    }
+  }, [params.soloMateriales]);
 
   useEffect(() => {
     let cancelado = false;
@@ -36,15 +56,14 @@ export default function SuministrosScreen() {
     const cargar = async () => {
       try {
         const [primeros, cantidad] = await Promise.all([
-          obtenerSuministros(db, PAGE_SIZE, 0, busqueda),
-          contarSuministros(db, busqueda),
+          obtenerSuministros(db, PAGE_SIZE, 0, busqueda, selectedTipos),
+          contarSuministros(db, busqueda, selectedTipos),
         ]);
         if (cancelado) return;
         setErrorCarga('');
         setSuministros(primeros);
         setTotal(cantidad);
         setOffset(primeros.length);
-       // await actualizarFiltro(db,'SM', '*', busqueda); //SM Suministros
       } catch (error) {
         if (!cancelado) {
           setErrorCarga(error.message);
@@ -55,17 +74,16 @@ export default function SuministrosScreen() {
 
     cargar();
 
-    
     return () => {
       cancelado = true;
     };
-  }, [db, busqueda]);
+  }, [db, busqueda, selectedTipos]);
 
   const cargarMas = async () => {
     if (cargandoMas || offset >= total) return;
     setCargandoMas(true);
     try {
-      const siguientes = await obtenerSuministros(db, PAGE_SIZE, offset, busqueda);
+      const siguientes = await obtenerSuministros(db, PAGE_SIZE, offset, busqueda, selectedTipos);
       setErrorCarga('');
       setSuministros(previos => [...previos, ...siguientes]);
       setOffset(previo => previo + siguientes.length);
@@ -126,6 +144,30 @@ export default function SuministrosScreen() {
             <FontAwesome5 name="times-circle" size={17} color="#667085" />
           </Pressable>
         )}
+      </View>
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, padding: 8 }}>
+        {TIPOS.map(t => {
+          const active = selectedTipos.includes(t.id);
+          return (
+            <Pressable
+              key={String(t.id)}
+              onPress={() => {
+                setSelectedTipos(prev =>
+                  active ? prev.filter(x => x !== t.id) : [...prev, t.id]
+                );
+              }}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 16,
+                backgroundColor: active ? '#192f6a' : '#eee',
+              }}
+            >
+              <Text style={{ color: active ? '#fff' : '#333', fontSize: 12 }}>{t.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <FlatList

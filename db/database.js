@@ -828,17 +828,30 @@ const tiposPermitidosSuministro = [
   'SEMIELABORADOS',
 ];
 
-const crearCondicionSuministros = (filtro = '') => {
+const crearCondicionSuministros = (filtro = '', tipos = null) => {
   const filtroNormalizado = filtro.trim();
-  const tiposSql = tiposPermitidosSuministro.map(() => '?').join(', ');
 
+  if (Array.isArray(tipos) && tipos.length > 0) {
+    const tipoSql = `UPPER(TRIM(recursos.Tipo)) IN (${tipos.map(() => '?').join(', ')})`;
+    const tipoParams = tipos.map(t => String(t).toUpperCase().trim());
+    if (!filtroNormalizado) {
+      return { sql: `WHERE ${tipoSql}`, parametros: tipoParams };
+    }
+    const patron = `%${filtroNormalizado}%`;
+    return {
+      sql: `WHERE ${tipoSql}
+             AND (recursos.IDRecurso LIKE ? OR recursos.Recurso LIKE ? OR recursotipos.tiporecurso LIKE ?)`,
+      parametros: [...tipoParams, patron, patron, patron],
+    };
+  }
+
+  const tiposSql = tiposPermitidosSuministro.map(() => '?').join(', ');
   if (!filtroNormalizado) {
     return {
       sql: `WHERE UPPER(TRIM(COALESCE(recursotipos.tiporecurso, ''))) IN (${tiposSql})`,
       parametros: tiposPermitidosSuministro,
     };
   }
-
   const patron = `%${filtroNormalizado}%`;
   return {
     sql: `WHERE UPPER(TRIM(COALESCE(recursotipos.tiporecurso, ''))) IN (${tiposSql})
@@ -847,8 +860,8 @@ const crearCondicionSuministros = (filtro = '') => {
   };
 };
 
-export const obtenerSuministros = async (db, limite = 50, offset = 0, filtro = '') => {
-  const { sql, parametros } = crearCondicionSuministros(filtro);
+export const obtenerSuministros = async (db, limite = 50, offset = 0, filtro = '', tipos = null) => {
+  const { sql, parametros } = crearCondicionSuministros(filtro, tipos);
   const queryParametros = [...parametros, limite, offset];
 
   return db.getAllAsync(
@@ -874,8 +887,8 @@ export const obtenerSuministros = async (db, limite = 50, offset = 0, filtro = '
   );
 };
 
-export const contarSuministros = async (db, filtro = '') => {
-  const { sql, parametros } = crearCondicionSuministros(filtro);
+export const contarSuministros = async (db, filtro = '', tipos = null) => {
+  const { sql, parametros } = crearCondicionSuministros(filtro, tipos);
   const row = await db.getFirstAsync(
     `SELECT COUNT(*) AS total
      FROM recursos

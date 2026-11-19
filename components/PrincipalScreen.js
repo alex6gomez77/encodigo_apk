@@ -15,7 +15,7 @@ export default function PrincipalScreen() {
   const [totalSubCapitulos, settotalSubCapitulos] = useState(0);
   const [totalRenglones, settotalRenglones] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
-  const [totalObjetos, setTotalObjetos] = useState(0);
+  const [totalSuministros, setTotalSuministros] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
 
   async function loadResumen() {
@@ -38,8 +38,8 @@ export default function PrincipalScreen() {
       const resultClientes = await db.getFirstAsync('SELECT COUNT(*) as total FROM clientes');
       setTotalClientes(resultClientes?.total ?? 0);
 
-    const resultObjetos = await db.getFirstAsync('SELECT COUNT(*) as total FROM objetosdeobras');
-      setTotalObjetos(resultObjetos?.total ?? 0);
+    const resultSuministros = await db.getFirstAsync('SELECT COUNT(*) as total FROM recursos');
+      setTotalSuministros(resultSuministros?.total ?? 0);
 
     } catch (e) {
     }
@@ -254,7 +254,7 @@ export default function PrincipalScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.gradienteResumenContainer}
           >
-          <Link href="/Objetos" asChild>
+          <Link href="/Suministros" asChild>
             <Pressable style={{alignItems: 'center'}}>
             <FontAwesome5 name="briefcase" size={30} color="#192f6a" />
             <Text 
@@ -263,10 +263,10 @@ export default function PrincipalScreen() {
               numberOfLines={1}
               minimumFontScale={0.6}
             >
-                Objetos
+                Suministros
               </Text>
               <Text style={styles.resumenNumero} adjustsFontSizeToFit numberOfLines={1}>
-                {totalObjetos}
+                {totalSuministros}
               </Text>
             </Pressable>
           </Link>

@@ -196,7 +196,7 @@ export default function DetalleRenglonScreen() {
                     ? `Cambiar suministro ${selectedSuministro.Recurso}`
                     : 'Seleccionar suministro opcional'
                 }
-                onPress={() => router.push('/Suministros')}
+                onPress={() => router.push({ pathname: '/Suministros', params: { soloMateriales: '1' } })}
                 style={styles.supplyPickerButton}
               >
                 <FontAwesome5
