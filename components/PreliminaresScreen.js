@@ -81,7 +81,38 @@ export default function PreliminaresScreen() {
   const [todos, setTodos] = useState(0);
   const [filtro, setFiltro] = useState('');
   const [cadenafiltro, setCadenafiltro] = useState([]);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalCambiarOOVisible, setModalCambiarOOVisible] = useState(false);
+  const [itemACambiar, setItemACambiar] = useState(null);
+  const [objetosDeObra, setObjetosDeObra] = useState([]);
+  const [objetoDestino, setObjetoDestino] = useState('');
+
+  const cambiarObjetoDeObra = async (item) => {
+    try {
+      const objs = await db.getAllAsync('SELECT * FROM objetosdeobras ORDER BY objetodeobra');
+      setObjetosDeObra(objs);
+      setItemACambiar(item);
+      setObjetoDestino(item.objetodeobra_id ? String(item.objetodeobra_id) : (objs[0]?.id ? String(objs[0].id) : ''));
+      setModalCambiarOOVisible(true);
+    } catch (e) {
+      Alert.alert('Error', 'No se pudieron cargar los objetos de obra.');
+    }
+  };
+
+  const confirmarCambioObjetoDeObra = async () => {
+    if (!itemACambiar || !objetoDestino) return;
+    try {
+      await db.runAsync(
+        'UPDATE listadodecantidades SET objetodeobra_id = ? WHERE id = ?',
+        Number(objetoDestino),
+        itemACambiar.asignacion_id
+      );
+      setRenglonesAsignados(await obtenerRenglonesAsignados(db, laObra.id));
+      setModalCambiarOOVisible(false);
+      setItemACambiar(null);
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo cambiar el objeto de obra.');
+    }
+  };
   const [modalDetalleVisible, setModalDetalleVisible] = useState(false);
   const [modalagregarAObraVisible, setModalagregarAObraVisible] = useState(false);
   const [exportacionVisible, setExportacionVisible] = useState(false);
@@ -958,7 +989,7 @@ export default function PreliminaresScreen() {
                     accessibilityLabel={`Eliminar ${
                       item.objetodeobra || 'objeto de obra'
                     } de la obra`}
-                    onPress={() => confirmarEliminarObjetoDeObra(item)}
+                    onPress={() => cambiarObjetoDeObra(item)}
                     style={styles.swipeChangeOOAction}
                   >
                   <FontAwesome5
@@ -1678,6 +1709,36 @@ export default function PreliminaresScreen() {
                 </View>
               </View>
             ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== MODAL CAMBIAR OBJETO DE OBRA ===== */}
+      <Modal
+        visible={modalCambiarOOVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalCambiarOOVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Cambiar objeto de obra</Text>
+            <Picker
+              selectedValue={objetoDestino}
+              onValueChange={(v) => setObjetoDestino(v)}
+            >
+              {objetosDeObra.map(o => (
+                <Picker.Item key={o.id} label={o.objetodeobra} value={String(o.id)} />
+              ))}
+            </Picker>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+              <TouchableOpacity onPress={() => setModalCambiarOOVisible(false)}>
+                <Text>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmarCambioObjetoDeObra}>
+                <Text>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
