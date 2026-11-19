@@ -110,9 +110,9 @@ export default function DetalleRenglonScreen() {
                 <Text style={styles.summaryLabel}>Precio</Text>
                 <Text style={styles.summaryValue}>
                   { conMateriales ?
-                  `${Number(renglon.Precio ?? 0).toFixed(2)} `
+                  `${Number(renglon.CDManoObra * renglon.Incremento + renglon.CDUsoEquipos + renglon.CDMateriales ?? 0).toFixed(2)} `
                 :
-                    `${Number(renglon.CDManoObra + renglon.CDUsoEquipos ?? 0).toFixed(2)} `
+                    `${Number(renglon.CDManoObra * renglon.Incremento + renglon.CDUsoEquipos ?? 0).toFixed(2)} `
                 }
                  x {renglon.umedicion ?? ''} 
                    
@@ -130,7 +130,7 @@ export default function DetalleRenglonScreen() {
                     <Text style={styles.checkboxLabel}>Incluyendo los Materiales</Text>
                   </Pressable>
                 </View>
-                <Text style={styles.checkboxLabel}>Perfil salarial: {renglon.perfilsalarial_id ?? 1}</Text>
+                <Text style={styles.checkboxLabel}>Perfil: {renglon.perfilsalarial ?? ''}</Text>
                 
               </View>
               
@@ -140,9 +140,9 @@ export default function DetalleRenglonScreen() {
                     <Text style={styles.summaryLabel}>{label}</Text>
                      <Text style={styles.summaryValue}>
                        {renglon[field]
-                         ? `${isCost ? '$' : ''}${renglon[field]}${field === 'CDManoObra' ? ` X ${renglon.perfilsalarial_id ?? '1'}` : ''}`
+                         ? `${isCost ? '$' : ''}${renglon[field]}${field === 'CDManoObra' ? ` * ${renglon.Incremento ?? '1'}` : ''}` 
                          : ''}
-                     </Text>
+                     </Text> 
                   </View>
                 ))}
               </View>

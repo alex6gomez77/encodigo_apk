@@ -164,7 +164,8 @@ return db.getFirstAsync(
            grupos.Grupo,
            sobregrupos.SobreGrupo,
            unidadesmedidas.umedicion,
-           (SELECT obras.perfilsalarial_id FROM obras LEFT JOIN generales ON generales.obra_activa = obras.id LIMIT 1) AS perfilsalarial_id
+           (SELECT perfilsalarial.Incremento FROM perfilsalarial JOIN obras ON obras.perfilsalarial_id = perfilsalarial.IDPerfilSalarial JOIN generales ON generales.obra_activa = obras.id LIMIT 1) AS Incremento,
+           (SELECT perfilsalarial.perfilsalarial FROM perfilsalarial JOIN obras ON obras.perfilsalarial_id = perfilsalarial.IDPerfilSalarial JOIN generales ON generales.obra_activa = obras.id LIMIT 1) AS perfilsalarial
     FROM rvariantes
    LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
    LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
@@ -646,12 +647,14 @@ export const obtenerObrasFiltradas = async (db, tablaId, limite = 50, offset = 0
   const consultaBase = `
     SELECT obras.*, generales.obra_activa,
            clientes.cliente,
+           perfilsalarial.Incremento,
            COALESCE(cantidades.objetos, 0) AS objetos_asignados,
            COALESCE(cantidades.renglones, 0) AS renglones_asignados,
            COALESCE(cantidades.precio, 0) AS precio_asignado
     FROM obras
     LEFT JOIN generales ON generales.obra_activa = obras.id
     LEFT JOIN clientes ON clientes.id = obras.cliente_id
+    LEFT JOIN perfilsalarial ON perfilsalarial.IDPerfilsalarial = obras.perfilsalarial_id
     LEFT JOIN (
       SELECT obra_id,
              COUNT(DISTINCT objetodeobra_id) AS objetos,

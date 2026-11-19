@@ -63,12 +63,13 @@ export default function PreliminaresScreen() {
   const totalesPorObjeto = useMemo(() => {
     const totales = new Map();
     for (const r of renglonesAsignados) {
-      const objetoId = r.objetodeobra_id;
+      const objetoId = String(r.objetodeobra_id ?? 'default');
       const costo = (Number(r.precio ?? 0) * Number(r.cantidad ?? 0)) || 0;
       totales.set(objetoId, (totales.get(objetoId) ?? 0) + costo);
     }
     return totales;
   }, [renglonesAsignados]);
+
   const costoTotalObra = useMemo(
     () => [...totalesPorObjeto.values()].reduce((total, costo) => total + costo, 0),
     [totalesPorObjeto]
@@ -1075,8 +1076,9 @@ export default function PreliminaresScreen() {
                         Precio: ${Number(item.precio ?? 0).toFixed(2)}
                       </Text>
                       <Text style={styles.assignedPrice}>
-                        Costo: 
-                        <Text style={{fontWeight: 'bold'}}>
+                        <Text>
+                        Costo: </Text>
+                        <Text >
                         $
                         {(
                           Number(item.precio ?? 0) * Number(item.cantidad ?? 0)

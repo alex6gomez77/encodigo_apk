@@ -1574,7 +1574,7 @@ export default function ObrasScreen() {
                 <Text style={{ fontSize: 14, fontWeight: 'bold' }}>  ${Number(obra.precio_asignado ?? 0).toFixed(2)}</Text>
               </View>
                <View style={{ alignItems: 'center', flex: 1, minWidth: 60  }}>
-                <Text style={{ fontSize: 14, color: '#666' }}>Objetos de Obra</Text>
+                <Text style={{ fontSize: 14, color: '#666' }}>Objetos</Text>
                 <Text style={{ fontSize: 14 }}> {Number(obra.objetos_asignados ?? 0)}</Text>
               </View>
               <View style={{ alignItems: 'center', flex: 1, minWidth: 60  }}>
@@ -1582,8 +1582,8 @@ export default function ObrasScreen() {
                 <Text style={{ fontSize: 14 }}> {Number(obra.renglones_asignados ?? 0)}</Text>
               </View> 
               <View style={{ alignItems: 'center', flex: 1, minWidth: 60  }}>
-                <Text style={{ fontSize: 14, color: '#666' }}>Perfil Salarial </Text>
-                <Text style={{ fontSize: 14 }}> {Number(obra.perfilsalarial_id ?? 1)}</Text>
+                <Text style={{ fontSize: 14, color: '#666' }}>Perfil </Text>
+                <Text style={{ fontSize: 14 }}> {Number(obra.Incremento ?? 1)}</Text>
               </View> 
             </View> 
 

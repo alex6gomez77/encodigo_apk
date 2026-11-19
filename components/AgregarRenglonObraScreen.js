@@ -48,7 +48,7 @@ export default function AgregarRenglonObraScreen() {
   const datosCargadosRef = useRef(false);
   const cantidadNumerica = Number(String(cantidad).trim().replace(',', '.'));
   const precioSuministro = Number(selectedSuministro?.Precio);
-  const precioRC = conMateriales ? Number(renglon?.Precio ?? 0) : Number(renglon?.CDManoObra + renglon?.CDUsoEquipos ?? 0);
+  const precioRC = conMateriales ? Number(renglon?.CDManoObra * renglon?.Incremento + renglon?.CDUsoEquipos + renglon?.CDMateriales ?? 0) : Number(renglon?.CDManoObra * renglon?.Incremento + renglon?.CDUsoEquipos ?? 0);
   const precioUnitario = Number.isFinite(precioSuministro)
     ? precioSuministro
     : (Number.isFinite(precioRC) ? precioRC : 0);
@@ -239,7 +239,7 @@ export default function AgregarRenglonObraScreen() {
         onBack={cerrar}
       />
  
-      <Text>{!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}</Text>
+      {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}
                
              
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
@@ -259,10 +259,12 @@ export default function AgregarRenglonObraScreen() {
             Precio: ${Number(precioRC ?? 0).toFixed(2)}  | Unidad: {renglon?.umedicion || '—'} |
             {conMateriales ?
             <Text style={{color: '#4b86b4'}} > Incluye los Materiales</Text>
-
             :
             <Text style={{color: '#b42318', paddingHorizontal: 10}} > Sin Materiales</Text>
             }
+          </Text>
+          <Text style={[styles.renglonPrice, selectedSuministro && { opacity: 0.3, textDecorationLine: 'line-through' }]}>
+            Perfil Salarial: {renglon?.perfilsalarial}
           </Text>
         </View>
 
@@ -553,5 +555,11 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 14,
     flexShrink: 1,
+  },
+  headerText: {
+    //color: '#192f6a',
+    marginLeft: 15,
+    fontWeight: 'bold',
+    marginBottom: 15
   },
 });
