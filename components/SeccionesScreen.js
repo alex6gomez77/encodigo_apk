@@ -177,7 +177,7 @@ export default function SeccionesScreen() {
       <ScreenHeader title="SECCIONES" count={todos} onBack={() => router.back()} />
       {filtroVisible ?
       <Text style={commonStyles.headerFiltro}>
-        Filtrado por { cadenafiltro }         
+        Filtradas por { cadenafiltro }         
       </Text>
       : 
       <Text style={commonStyles.headerFiltro}>Se muestran 'Todas las Secciones'

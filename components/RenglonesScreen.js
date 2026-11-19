@@ -150,7 +150,7 @@ export default function RenglonesScreen() {
       />
       {filtroVisible ?
       <Text style={commonStyles.headerFiltro}>
-        Filtrado por { cadenafiltro }         
+        Filtrados por { cadenafiltro }         
       </Text>
       : 
       <Text style={commonStyles.headerFiltro}>Se muestran 'Todos los Renglones Constructivos'

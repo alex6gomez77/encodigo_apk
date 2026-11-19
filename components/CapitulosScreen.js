@@ -148,7 +148,7 @@ export default function CapitulosScreen() {
       <ScreenHeader title="CAPÍTULOS" count={todos} onBack={() => router.back()} />
       {filtroVisible ?
       <Text style={commonStyles.headerFiltro}>
-        Filtrado por { cadenafiltro }         
+        Filtrados por { cadenafiltro }         
       </Text>
       : 
       <Text style={commonStyles.headerFiltro}>Se muestran 'Todos los Capítulos'
