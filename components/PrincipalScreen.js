@@ -233,7 +233,7 @@ export default function PrincipalScreen() {
           >
           <Link href="/Clientes" asChild>
             <Pressable style={{alignItems: 'center'}}>
-            <FontAwesome5 name="pen-fancy" size={30} color="#192f6a" />
+            <FontAwesome5 name="users" size={30} color="#192f6a" />
             <Text 
               style={styles.cabecera}
               adjustsFontSizeToFit
@@ -256,7 +256,7 @@ export default function PrincipalScreen() {
           >
           <Link href="/Suministros" asChild>
             <Pressable style={{alignItems: 'center'}}>
-            <FontAwesome5 name="briefcase" size={30} color="#192f6a" />
+            <FontAwesome5 name="boxes" size={30} color="#192f6a" />
             <Text 
               style={styles.cabecera}
               adjustsFontSizeToFit

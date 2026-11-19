@@ -115,6 +115,7 @@ export default function PreliminaresScreen() {
   };
   const [modalDetalleVisible, setModalDetalleVisible] = useState(false);
   const [modalagregarAObraVisible, setModalagregarAObraVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [exportacionVisible, setExportacionVisible] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [exportacionmensaje, setExportacionmensaje] = useState('');

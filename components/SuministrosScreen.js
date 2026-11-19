@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Link } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { AppText as Text } from './AppText';
@@ -120,6 +120,7 @@ export default function SuministrosScreen() {
   );
 
   return (
+    <>
     <View style={styles.container}>
       <ScreenHeader title="SUMINISTROS" count={total} onBack={() => router.back()} />
 
@@ -171,6 +172,7 @@ export default function SuministrosScreen() {
       </View>
 
       <FlatList
+        style={{ flex: 1 }}
         data={suministros}
         keyExtractor={item => String(item.IDRecurso)}
         renderItem={renderSuministro}
@@ -189,13 +191,26 @@ export default function SuministrosScreen() {
         }
       />
     </View>
+    <Pressable style={styles.fab} onPress={() => router.push('/AgregarSuministro')}>
+      <FontAwesome5 name="plus" size={20} color="#fff" />
+    </Pressable>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#192f6a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+    elevation: 5,
   },
   searchContainer: {
     flexDirection: 'row',
