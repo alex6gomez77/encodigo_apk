@@ -264,7 +264,7 @@ export default function ObrasScreen() {
 
   const defaultForm = {
     codigo: '',
-    cliente_id: '',
+    cliente_id: '1',
     obra: '',
     p100utilidades: '15',
     p100impuestos: '10',
@@ -1637,7 +1637,19 @@ export default function ObrasScreen() {
                     exportando && { opacity: 0.5 }, 
                     isPremiumDisabled() && { opacity: 0.3 }
                   ]}
-                  disabled={isPremiumDisabled()}
+                  disabled={exportando}
+                >
+                  <FontAwesome5 name="save" size={15} color={exportando ? '#999' : '#ffffff'} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleExportarObraWORD(obra)}
+                  style={[
+                    commonStyles.buttonObraFlotante, 
+                    {backgroundColor: "#8e44ad"}, 
+                    exportando && { opacity: 0.5 }
+                  ]}
+                  disabled={exportando}
                 >
                   <FontAwesome5 name="file-word" size={15} color={exportando ? '#999' : '#ffffff'} />
                 </TouchableOpacity>
@@ -2105,17 +2117,3 @@ const styles = StyleSheet.create({
 });
 
 
-
-/*
-IDPerfilSalarial	PerfilSalarial	Incremento	AplicarPagosAdicionales	Activo
-0	SIN INCREMENTO DE LA TARIFA SALARIAL VIGENTE	1	1	1
-1	INCREMENTO DE HASTA 1.5 VEZ LA TARIFA SALARIAL	1,5	1	1
-2	INCREMENTO DE HASTA 2 VECES LA TARIFA SALARIAL	2	1	1
-3	INCREMENTO DE HASTA 2.5 VECES LA TARIFA SALARIAL	2,5	1	1
-4	INCREMENTO DE HASTA 3 VECES LA TARIFA SALARIAL	3	1	1
-5	INCREMENTO DE HASTA 4 VECES LA TARIFA SALARIAL	4	1	1
-6	INCREMENTO MÁXIMO DE 5 VECES LA TARIFA SALARIAL	5	1	1
-
-
-
-*/
