@@ -45,7 +45,7 @@ export default function SuministrosScreen() {
 
   useEffect(() => {
     if (params.soloMateriales === '1') {
-      setSelectedTipos(['1', 'S']);
+      setSelectedTipos(['1', 'S', 'J']);
     } else {
       setSelectedTipos(TIPOS.map(t => t.id));
     }

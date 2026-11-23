@@ -7,7 +7,8 @@
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
-      "assets/**/*"
+      "assets/**/*",
+      "./assets/listadodecantidades.docx"
     ],
     "scheme": "encodigo",
     "newArchEnabled": true,
