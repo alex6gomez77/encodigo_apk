@@ -575,12 +575,12 @@ export default function ObrasScreen() {
             subcapitulo: f.SubGrupo,
             codigo_rc: f.IDRVariante,
             descripcion_rc: f.descripcion,
-            cantidad_rc:  f.cantidad.toFixed(2) || 0,
+            cantidad_rc: Number(f.cantidad ?? 0).toFixed(2),
             um_rc: f.um,
-            precio_rc:  f.precio.toFixed(2) || 0,
-            importe_rc: '0',// f.importe.toFixed(2) || 0
+            precio_rc:   Number(f.precio ?? 0).toFixed(2),
+            importe_rc: (Number(f.cantidad ?? 0) * Number(f.precio ?? 0)).toFixed(2),
           }));
-        gastototal += objetodeobra.subtotal;
+        gastototal += Number(objetodeobra.subtotal ?? 0);
         return [...acc, {
           descripcion_oo: objetodeobra.objetodeobra,
          // importe_oo: objetodeobra.subtotal.toFixed(2) || 0,
@@ -589,23 +589,33 @@ export default function ObrasScreen() {
       }, []);
       data.objetosdeobra = objetosdeObras;
         
-      
+      /*
       const asset = require('../assets/listadodecantidades.docx');
       const assetUri = Asset.fromModule(asset).uri;
       const base64 = await FileSystem.readAsStringAsync(assetUri,{encoding:FileSystem.EncodingType.Base64,});
+*/
+        const asset = Asset.fromModule(require('../assets/listadodecantidades.docx'));
+        await asset.downloadAsync();
+        const assetUri = asset.localUri;
+        if (!assetUri) throw new Error('No se pudo obtener la ruta local del asset');
+        const base64 = await FileSystem.readAsStringAsync(assetUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });   
+
+
       const binaryString = atob(base64);
       const zip = new PizZip(binaryString);
       const doc = new Docxtemplater(zip, {paragraphLoop:true,
         linebreaks:true,
       });
-      doc.render(datos);
+      doc.render(data);
       
               
       // Generar el nuevo documento en base64
       const contenido = doc.getZip().generate({
         type: 'base64',
         //compression: 'DEFLATE',
-        mimeType: 'application/vnd.openxmlformats-officeDocument.wordprocessingml.document',
+       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       });
 
       // Guardar en el dispositivo
@@ -654,7 +664,7 @@ export default function ObrasScreen() {
             destino === 'guardar'
               ? 'Guardar documento'
               : 'Enviar listado de cantidades',
-          UTI: 'org.openxmlformats.spreadsheetml.sheet',
+          UTI: 'org.openxmlformats.wordprocessingml.document',
         });
         setExportacionMensaje(
           destino === 'guardar'
