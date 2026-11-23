@@ -64,7 +64,7 @@ export const obtenerEtapas = (db) => {
 
 export const activarEtapa = (db, IDSobreGrupo) => {
   return db.getFirstAsync(
-    `SELECT subetapas.IDSubEtapa FROM subetapas WHERE IDSobreGrupo = ?`, [IDSobreGrupo]);
+    `SELECT subetapas.IDSubEtapa FROM subetapas WHERE IDSobreGrupo LIKE ?`, [IDSobreGrupo]);
 };
 
 

@@ -58,7 +58,6 @@ export default function ObjetosScreen() {
   }
 
   async function guardarObjeto() {
-    console.log('guardarObjeto', { nombre, editarId });
     const nombreLimpio = nombre.trim();
     if (!nombreLimpio) {
       Alert.alert('Validación', 'Ingresa el nombre del objeto de obra.');

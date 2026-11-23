@@ -35,6 +35,7 @@ export default function SuministrosScreen() {
   const params = useLocalSearchParams();
   const { setSelectedSuministro } = useSuministroSelection();
   const [suministros, setSuministros] = useState([]);
+  const [precioSemielaborado, setPrecioSemielaborado] = useState(0);
   const [busqueda, setBusqueda] = useState('');
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -61,7 +62,7 @@ export default function SuministrosScreen() {
         ]);
         if (cancelado) return;
         setErrorCarga('');
-        setSuministros(primeros);
+        setSuministros(primeros);        
         setTotal(cantidad);
         setOffset(primeros.length);
       } catch (error) {
@@ -95,8 +96,39 @@ export default function SuministrosScreen() {
     }
   };
 
-  const seleccionarSuministro = suministro => {
-    setSelectedSuministro(suministro);
+  const seleccionarSuministro = async suministro => {
+      suministro['MO'] = 0;
+      suministro['EQ'] = 0;
+      suministro['MA'] = 0;
+
+      if (suministro.Tipo == 'S' || suministro.Tipo == 'J'){
+        const recursos = await db.getAllAsync(
+          `SELECT rc.Tipo, 
+              SUM(rc.Precio * c.Norma) AS Subtotal
+          FROM crecursos c
+          LEFT JOIN recursos rn ON rn.IDRecurso = c.IDRecursoNorma
+          LEFT JOIN recursos rc ON rc.IDRecurso = c.IDRecurso
+          WHERE c.IDRecursoNorma = ?
+          GROUP BY rc.Tipo
+          `, [suministro.IDRecurso]
+        );  
+
+       recursos.map( rec => {  
+          if(rec.Tipo == "2"){         
+            suministro['MO'] = rec.Subtotal ;
+          } else if(rec.Tipo == "3"){         
+            suministro['EQ'] = rec.Subtotal;
+          } else if(rec.Tipo == "1"){          
+            suministro['MA'] = rec.Subtotal;
+          }               
+        });        
+      } else if(suministro.Tipo == '1'){ //Materiales       
+        suministro['MA'] = suministro.Precio;       
+      } else { 
+        suministro = null;       
+      }
+
+    setSelectedSuministro(suministro);     
     router.back();
   };
 
@@ -113,7 +145,7 @@ export default function SuministrosScreen() {
       </View>
       <Text style={styles.supplyName}>{item.Recurso || '(Sin descripción)'}</Text>
       <Text style={styles.supplyDetails}>
-        {`Unidad: ${item.umedicion || item.UM || '—'}  |  Precio: $${Number(item.Precio ?? 0).toFixed(2)}`}
+        {`Precio: $${Number(item.Precio ?? 0).toFixed(2)} | Unidad: ${item.umedicion || item.UM || '—'} `}
         {Number(item.Peso) > 0 ? `  |  Peso: ${Number(item.Peso).toFixed(4)} kg` : ''}
       </Text>
     </Pressable>
@@ -161,8 +193,8 @@ export default function SuministrosScreen() {
               style={{
                 paddingHorizontal: 10,
                 paddingVertical: 6,
-                borderRadius: 16,
-                backgroundColor: active ? '#192f6a' : '#eee',
+                borderRadius: 5,
+                backgroundColor: active ? '#4b86b4' : '#eee',
               }}
             >
               <Text style={{ color: active ? '#fff' : '#333', fontSize: 12 }}>{t.label}</Text>
@@ -172,12 +204,11 @@ export default function SuministrosScreen() {
       </View>
 
       <FlatList
-        style={{ flex: 1 }}
         data={suministros}
-        keyExtractor={item => String(item.IDRecurso)}
+        keyExtractor={item => String(item.IDRecurso.toString())}
         renderItem={renderSuministro}
         onEndReached={cargarMas}
-        onEndReachedThreshold={0.4}
+        onEndReachedThreshold={0.5}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
@@ -191,7 +222,7 @@ export default function SuministrosScreen() {
         }
       />
     </View>
-    <Pressable style={styles.fab} onPress={() => router.push('/AgregarSuministro')}>
+    <Pressable style={commonStyles.buttonFlotante} onPress={() => router.push('/AgregarSuministro')}>
       <FontAwesome5 name="plus" size={20} color="#fff" />
     </Pressable>
     </>
@@ -205,8 +236,8 @@ const styles = StyleSheet.create({
     bottom: 20,
     width: 50,
     height: 50,
-    borderRadius: 25,
-    backgroundColor: '#192f6a',
+    borderRadius: 5,
+    backgroundColor: '#4b86b4',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 999,

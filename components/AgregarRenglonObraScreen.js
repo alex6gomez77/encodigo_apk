@@ -47,7 +47,8 @@ export default function AgregarRenglonObraScreen() {
   const [irAPreliminares, setIrAPreliminares] = useState(false);
   const datosCargadosRef = useRef(false);
   const cantidadNumerica = Number(String(cantidad).trim().replace(',', '.'));
-  const precioSuministro = Number(selectedSuministro?.Precio);
+  //const precioSuministro = Number(selectedSuministro?.Precio);
+  const precioSuministro = conMateriales ? Number(selectedSuministro?.MO * renglon?.Incremento + selectedSuministro?.EQ + selectedSuministro?.MA ?? 0) : Number(selectedSuministro?.MO * renglon?.Incremento + selectedSuministro?.EQ ?? 0);
   const precioRC = conMateriales ? Number(renglon?.CDManoObra * renglon?.Incremento + renglon?.CDUsoEquipos + renglon?.CDMateriales ?? 0) : Number(renglon?.CDManoObra * renglon?.Incremento + renglon?.CDUsoEquipos ?? 0);
   const precioUnitario = Number.isFinite(precioSuministro)
     ? precioSuministro
@@ -107,7 +108,8 @@ export default function AgregarRenglonObraScreen() {
         objetosCargados.find(objeto => String(objeto.id) === String(activoId)) ??
           null
       );
-      setEtapaId(etapaActiva.IDSubEtapa);
+      console.log('etapaActiva',etapaActiva);
+      etapaActiva ? setEtapaId(etapaActiva.IDSubEtapa) : setEtapaId('1001');
       datosCargadosRef.current = true;
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
@@ -239,10 +241,19 @@ export default function AgregarRenglonObraScreen() {
         onBack={cerrar}
       />
  
-      {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}
-               
-             
+      {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}              
+            <View style={{textAlign: 'right', alignItems: 'flex-end', paddingHorizontal: 5, backgroundColor: '#4b86b4', marginHorizontal: 20, borderRadius: 5}}>
+            <View style={styles.checkboxRow}>                            
+            {conMateriales ?
+              <Text style={{color: '#ffffff', fontWeight: 'bold'}} > INCLUYENDO LOS MATERIALES</Text>
+              :
+              <Text style={{color: '#fffb00', fontWeight: 'bold'}} >SIN MATERIALES</Text>
+              }
+          </View>
+          <Text style={{color: '#ffffff',fontSize: 12, fontWeight: 'bold' }}>{renglon?.perfilsalarial}</Text>
+        </View>  
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
+       
         <View style={styles.renglonInfo}>
           <Text style={styles.hierarchyText}>
              {renglon?.SobreGrupo || 'Sin sección'} | {renglon?.Grupo || 'Sin capítulo'} | {renglon?.SubGrupo || 'Sin subcapítulo'}
@@ -256,16 +267,10 @@ export default function AgregarRenglonObraScreen() {
             </Text>
           </View>
           <Text style={[styles.renglonPrice, selectedSuministro && { opacity: 0.3, textDecorationLine: 'line-through' }]}>
-            Precio: ${Number(precioRC ?? 0).toFixed(2)}  | Unidad: {renglon?.umedicion || '—'} |
-            {conMateriales ?
-            <Text style={{color: '#4b86b4'}} > Incluye los Materiales</Text>
-            :
-            <Text style={{color: '#b42318', paddingHorizontal: 10}} > Sin Materiales</Text>
-            }
+            Precio: ${Number(precioRC ?? 0).toFixed(2)}  | Unidad: {renglon?.umedicion || '—'} 
+            
           </Text>
-          <Text style={[styles.renglonPrice, selectedSuministro && { opacity: 0.3, textDecorationLine: 'line-through' }]}>
-            Perfil Salarial: {renglon?.perfilsalarial}
-          </Text>
+         
         </View>
 
         <View style={styles.formSection}>
@@ -289,8 +294,12 @@ export default function AgregarRenglonObraScreen() {
                   {`${selectedSuministro.Recurso} | Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'}  `}
                 </Text>
                 <Text style={[styles.supplyDetails, {color: 'black', fontSize: 14}]}>
-                  {`Precio: $${Number(selectedSuministro.Precio ?? 0).toFixed(2)} | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'} `}
-                </Text>
+                 Precio: ${ conMateriales ?
+                        `${Number(selectedSuministro.MO * renglon?.Incremento + selectedSuministro.EQ + selectedSuministro.MA ?? 0).toFixed(2)} `
+                      :
+                          `${Number(selectedSuministro.MO * renglon?.Incremento + selectedSuministro.EQ ?? 0).toFixed(2)} `
+                      } 
+                      {` | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'}`}</Text>
 
               </View>
             </>
@@ -551,6 +560,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    fontWeight: 'bold'
   },
   checkboxLabel: {
     fontSize: 14,
@@ -560,6 +570,5 @@ const styles = StyleSheet.create({
     //color: '#192f6a',
     marginLeft: 15,
     fontWeight: 'bold',
-    marginBottom: 15
   },
 });

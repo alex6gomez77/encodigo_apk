@@ -98,6 +98,16 @@ export default function PreliminaresScreen() {
     }
   };
 
+  const activarObra = async (id) => {
+    console.log('Activando la Obra ', id);
+    try {
+      await establecerObraActiva(db, id);
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : JSON.stringify(error);
+      Alert.alert('Error', `No se pudo activar la obra. ${detalle || String(error)}`);
+    }
+  };
+
   const confirmarCambioObjetoDeObra = async () => {
     if (!itemACambiar || !objetoDestino) return;
     try {
@@ -752,6 +762,7 @@ export default function PreliminaresScreen() {
   };
 
   const importarCantidadesObjeto = async (objetodeobra_id_param) => {
+   
     setObjetoImportando(objetodeobra_id_param);
     setImportando(true);
     setImportacionMensaje('');
@@ -784,7 +795,6 @@ export default function PreliminaresScreen() {
       } catch (readError) {
         throw new Error('No se pudo leer el archivo Excel seleccionado.');
       }
-
       const zip = new PizZip(contenidoBase64);
 
       const workbookXml = zip.file('xl/workbook.xml')?.asText() || '';
@@ -795,7 +805,7 @@ export default function PreliminaresScreen() {
         return match ? match[1] : '';
       });
 
-      
+       
 
       let nombreDesdeHoja = sheetNames[0] || '';
       let nombreObjetoFinal = 'default';
@@ -943,15 +953,43 @@ export default function PreliminaresScreen() {
 
       <View style={styles.listModeContainer}>
         <View style={styles.assignedListTitle}>
-          <Text style={styles.assignedPrice}>
-            Costo: ${costoTotalObra.toFixed(2)}
-          </Text>
+          <Text>
+            Costo: </Text>
+            <Text style={{fontWeight: 'bold'}}>
+            $
+            {(
+              Number(costoTotalObra)
+            ).toFixed(2)}
+            </Text>
+          
         </View>
         <Link href="/Renglones" asChild>
-          <Pressable style={{ alignItems: 'center', marginRight: 10 }}>
-            <FontAwesome5 name="bars" size={20} color="#192f6a" />
+          <Pressable style={{ alignItems: 'center', marginRight: 10 }}
+          onPress={() => { 
+            activarObra(idObra);
+          }}
+          >
+            <FontAwesome5 name="plus" size={20} color="#192f6a" />
           </Pressable>
         </Link>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Importar cantidades de ${
+            1 || 'objeto de obra'
+          }`}
+          onPress={() => {
+            setObjetoImportando(1);
+            setImportModalVisible(true);
+          }}
+          style={styles.importObjetoButton}
+          
+        >
+          <FontAwesome5
+            name="file-import"
+            size={14}
+            color="#ffffff"
+          />
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Generar Excel del listado de cantidades"
@@ -1012,26 +1050,7 @@ export default function PreliminaresScreen() {
                   >
                     <FontAwesome5 name="file-excel" size={14} color="#ffffff" />
                   </RectButton>
-                  <RectButton
-                    accessibilityRole="button"
-                    accessibilityLabel={`Importar cantidades de ${
-                      item.objetodeobra || 'objeto de obra'
-                    }`}
-                    onPress={() => {
-                      setObjetoImportando(item.objetodeobra_id);
-                      setImportModalVisible(true);
-                    }}
-                    style={[styles.importObjetoButton, {opacity: 0.5}]}
-                    disabled={
-                      true || objetoImportando === item.objetodeobra_id || importando
-                    }
-                  >
-                    <FontAwesome5
-                      name="file-import"
-                      size={14}
-                      color="#ffffff"
-                    />
-                 </RectButton>
+                  
                  </>
                 )}
               >
@@ -1107,7 +1126,7 @@ export default function PreliminaresScreen() {
                       <Text style={styles.assignedPrice}>
                         Precio: ${Number(item.precio ?? 0).toFixed(2)}
                       </Text>
-                      <Text style={styles.assignedPrice}>
+                      <Text style={[styles.assignedPrice, {marginLeft: 10}]}>
                         <Text>
                         Costo: </Text>
                         <Text >
@@ -1136,7 +1155,11 @@ export default function PreliminaresScreen() {
             </Text>
 
             <Link href="/Renglones" asChild>
-              <Pressable style={{ alignItems: 'center' }}>
+              <Pressable style={{ alignItems: 'center' }}
+                onPress={() => { 
+                  activarObra(idObra);
+                }}
+              >
                 <FontAwesome5 name="bars" size={30} color="#192f6a" />
                 <Text
                   style={styles.cabecera}
@@ -1986,6 +2009,7 @@ const styles = StyleSheet.create({
   assignedListTitle: {
     flex: 1,
     flexShrink: 1,
+    flexDirection: 'row',
   },
   exportButton: {
     flexDirection: 'row',
@@ -2010,13 +2034,13 @@ const styles = StyleSheet.create({
   },
   importObjetoButton: {    
     backgroundColor: '#e67e22',
-    justifyContent: 'center',
+     flexDirection: 'row',
     alignItems: 'center',
-    width: 30,
-    marginVertical: 4,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    marginHorizontal: 4
+    justifyContent: 'center',
+    borderRadius: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginLeft: 2,
   },
   exportButtonText: {
     color: '#ffffff',
