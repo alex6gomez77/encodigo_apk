@@ -140,6 +140,7 @@ export default function PreliminaresScreen() {
   const [importacionMensaje, setImportacionMensaje] = useState('');
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [objetoImportando, setObjetoImportando] = useState(null);
+  const [modalSeleccionarObjetoImportarVisible, setModalSeleccionarObjetoImportarVisible] = useState(false);
   const [filtroVisible, setFiltroVisible] = useState(false);
   const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
   const [detallesRenglon, setDetallesRenglon] = useState(null);
@@ -763,6 +764,15 @@ export default function PreliminaresScreen() {
     }
   };
 
+  const cargarObjetosParaImportar = async () => {
+    try {
+      const objs = await obtenerObjetosdeobras(db);
+      setObjetosdeobras(objs);
+    } catch (e) {
+      Alert.alert('Error', 'No se pudieron cargar los objetos de obra.');
+    }
+  };
+
   const importarCantidadesObjeto = async (objetodeobra_id_param) => {
    
     setObjetoImportando(objetodeobra_id_param);
@@ -976,12 +986,10 @@ export default function PreliminaresScreen() {
         </Link>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Importar cantidades de ${
-            1 || 'objeto de obra'
-          }`}
+          accessibilityLabel={`Importar cantidades de objeto de obra`}
           onPress={() => {
-            setObjetoImportando(1);
-            setImportModalVisible(true);
+            cargarObjetosParaImportar();
+            setModalSeleccionarObjetoImportarVisible(true);
           }}
           style={[styles.importObjetoButton,
                     (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }]
@@ -1227,6 +1235,66 @@ export default function PreliminaresScreen() {
                 onPress={handleCancelar}
               >
                 <Text style={commonStyles.buttonTextAgregar}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== MODAL SELECCIONAR OBJETO PARA IMPORTAR ===== */}
+      <Modal
+        visible={modalSeleccionarObjetoImportarVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setObjetoImportando(null);
+          setModalSeleccionarObjetoImportarVisible(false);
+        }}
+      >
+        <View style={styles.importModalOverlay}>
+          <View style={styles.importModalContainer}>
+            <Text style={styles.importModalTitle}>
+              Asignar listado a objeto de obra
+            </Text>
+            <Text style={styles.importModalMessage}>
+              Selecciona el objeto de obra al que se importará el listado.
+            </Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={objetoImportando ?? ''}
+                onValueChange={(value) => setObjetoImportando(value)}
+              >
+                {(objetosdeobras ?? []).map((oo) => (
+                  <Picker.Item key={oo.id} label={oo.objetodeobra} value={String(oo.id)} />
+                ))}
+              </Picker>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                marginTop: 16,
+              }}
+            >
+              <TouchableOpacity
+                style={commonStyles.buttonCancelar}
+                onPress={() => {
+                  setObjetoImportando(null);
+                  setModalSeleccionarObjetoImportarVisible(false);
+                }}
+              >
+                <Text style={commonStyles.buttonTextAgregar}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={commonStyles.buttonAgregar}
+                onPress={() => {
+                  setModalSeleccionarObjetoImportarVisible(false);
+                  setImportModalVisible(true);
+                }}
+              >
+                <Text style={commonStyles.buttonTextAgregar}>
+                  Continuar
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
