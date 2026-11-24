@@ -131,14 +131,15 @@ export default function HomeScreen() {
           resizeMode="contain"
         />       
         <Text style={styles.subtitleText}>
-          SISTEMA DE CÓDIGOS DEL PRECONS III{'\n'} CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}Versión: 1.0.0 {'\n'}( Build 13112026 )
+          SISTEMA DE CÓDIGOS DEL PRECONS III{'\n'} CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}Versión: Beta {'\n'}( Build 13112026 )
         </Text>   
      
 
      
         <Link href="/Principal" asChild>
           <Pressable>
-            <Text style={styles.texto}>ACCEDER</Text>          
+            <Text style={styles.texto}>ACCEDER</Text>   
+           <Text style={{color:'#ffffff', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'red', paddingHorizontal: 5, borderRadius: 5}}>SOLO DE PRUEBA</Text>     
           </Pressable>
         </Link>
 

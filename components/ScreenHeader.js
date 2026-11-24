@@ -1,6 +1,6 @@
 import React from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { AppText as Text } from "./AppText";
 import { commonStyles } from "../styles/commonStyles";
@@ -12,6 +12,39 @@ export default function ScreenHeader({
   backHref,
   rightAccessory,
 }) {
+  const router = useRouter();
+
+  // Navegación defensiva desde el logo:
+  // 1) Cierra modales/pantallas apiladas si existen.
+  // 2) Navega a /Principal.
+  // 3) Si /Principal no existe, cae a la raíz "/".
+  const irAPrincipal = () => {
+    try {
+      if (router.canGoBack()) {
+        // Cierra todos los modales abiertos (si la API está disponible)
+        if (typeof router.dismissAll === "function") {
+          router.dismissAll();
+        } else {
+          router.back();
+        }
+      }
+      router.replace("/Principal");
+    } catch (error) {
+      console.warn(
+        "No se pudo navegar a /Principal, intentando raíz:",
+        error?.message
+      );
+      try {
+        router.replace("/");
+      } catch (fallbackError) {
+        console.warn(
+          "Tampoco se pudo navegar a la raíz:",
+          fallbackError?.message
+        );
+      }
+    }
+  };
+
   const backButton = (
     <Pressable onPress={onBack} style={styles.backButton}>
       <FontAwesome5 name="arrow-left" size={20} color="#192f6a" />
@@ -27,26 +60,32 @@ export default function ScreenHeader({
       ) : onBack ? (
         backButton
       ) : null}
+
       <View style={styles.identity}>
-        <Link href="/Principal" asChild>
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel="Ir a Principal"
-          >
-            <Image
-              source={require("../assets/logo.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </Pressable>
-        </Link>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Ir a Principal"
+          onPress={irAPrincipal}
+        >
+          <Image
+            source={require("../assets/logo.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Pressable>
+
         <View style={styles.textBlock}>
           <View style={styles.row}>
             <Text style={styles.leftText}>ENCODIGO</Text>
+            <Text style={{color:'#ffffff', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'red', paddingHorizontal: 5, borderRadius: 5}}>SOLO DE PRUEBA</Text>
             <Text style={styles.rightText}>PRECONS III</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.leftText} numberOfLines={1} ellipsizeMode="tail">
+            <Text
+              style={styles.leftText}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {title}
             </Text>
             <Text style={styles.rightText} numberOfLines={1}>
@@ -55,6 +94,7 @@ export default function ScreenHeader({
           </View>
         </View>
       </View>
+
       {rightAccessory}
     </View>
   );

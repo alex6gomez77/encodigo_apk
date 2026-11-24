@@ -17,7 +17,7 @@ export default function AboutScreen(){
             />
 
             <Text style={styles.subtitleText}>
-              SISTEMA DE CÓDIGOS DEL PRECONS III{'\n'}CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}Versión: 1.0.0 {'\n'}( Build 13112026 )
+              SISTEMA DE CÓDIGOS DEL PRECONS III{'\n'}CÁLCULOS ESTIMADOS DE PRECIOS{'\n'}Versión: Beta {'\n'}( Build 23112026 )
             </Text>
 
            

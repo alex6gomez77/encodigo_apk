@@ -172,8 +172,12 @@ export default function AgregarRenglonObraScreen() {
   };
 
   const agregar = async () => {
-    if (obraId == null || objetoDeObraSeleccionadoId == null) {
-      Alert.alert('Validación', 'Seleccione una obra y un objeto de obra antes de continuar.');
+    if (obraId == null ) {
+      Alert.alert('Validación', 'Debe crear primero al menos una obra y activarla antes de continuar.');
+      return;
+    }
+    if (objetoDeObraSeleccionadoId == null) {
+      Alert.alert('Validación', 'Seleccione un objeto de obra antes de continuar.');
       return;
     }
     if (!Number.isFinite(cantidadNumerica) || cantidadNumerica <= 0) {

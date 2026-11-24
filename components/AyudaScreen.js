@@ -136,17 +136,12 @@ export default function AyudaScreen() {
           Consulta la normativa aplicable y verifica sus actualizaciones antes
           de utilizar los resultados de la estimación.
         </Text>
-        <Link
-          href="https://www.gacetaoficial.gob.cu/es/resolucion-148-de-2023-de-ministerio-de-finanzas-y-precios"
-          style={styles.link}
-        >
-          Resolución 148/2023 (GOC-2023-593-O64)
-        </Link>
+       
 
         <Text style={styles.question}>¿Cómo saber si hay una nueva versión?</Text>
         <Text style={styles.answer}>Consulta el proyecto ENCODIGO:</Text>
         <Link
-          href="https://drive.google.com/drive/folders/1g90nKs5f-05UStcy81WXdDW4c1myPyZT?usp=drive_link"
+          href="https://drive.google.com/"
           style={styles.link}
         >
           PROYECTO ENCODIGO
@@ -160,27 +155,14 @@ export default function AyudaScreen() {
 
         <Text style={styles.sectionTitle}>Control de versiones</Text>
         <Text style={styles.versionTitle}>
-          Versión (APK) 1.0.0 (Build 30112025)
+          Versión (APK) Beta (Build 23112026)
         </Text>
         <Text style={styles.listItem}>• Primera versión para Android.</Text>
-        <Text style={styles.versionTitle}>Versión (PC) 2.1.0 (31/05/2025)</Text>
+        <Text style={styles.versionTitle}>Versión (PC) 1.1.0 (31/05/2025)</Text>
         <Text style={styles.listItem}>
-          • Se aplica redondeo al precio final de la obra o del producto.
+          • Primera versión pública.
         </Text>
-        <Text style={styles.listItem}>
-          • Corrección de caracteres no válidos en nombres de archivos exportados.
-        </Text>
-        <Text style={styles.versionTitle}>Versión (PC) 2.0.0 (15/03/2025)</Text>
-        <Text style={styles.listItem}>• Nueva interfaz de usuario.</Text>
-        <Text style={styles.listItem}>
-          • Mejoras en la gestión de recursos y equipos.
-        </Text>
-        <Text style={styles.versionTitle}>Versión (PC) 1.5.0 (10/12/2024)</Text>
-        <Text style={styles.listItem}>
-          • Soporte para exportación e importación de obras.
-        </Text>
-        <Text style={styles.versionTitle}>Versión (PC) 1.0.0 (01/09/2024)</Text>
-        <Text style={styles.listItem}>• Primera versión pública.</Text>
+        
       </ScrollView>
     </View>
   );

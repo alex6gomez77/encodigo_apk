@@ -69,7 +69,7 @@ export default function PrincipalScreen() {
             </Pressable>
           </Link>
         </View>
-        
+        <Text style={{color:'#ffffff', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'red', paddingHorizontal: 5, borderRadius: 5}}>SOLO DE PRUEBA</Text>
       
 
       <View style={styles.resumenContainer2}>

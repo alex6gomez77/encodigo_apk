@@ -22,6 +22,7 @@ import ScreenHeader from './ScreenHeader';
 import { useSQLiteContext } from 'expo-sqlite';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useLocalSearchParams, Link, useRouter } from 'expo-router';
+import { useLicencia, LICENCIA_ESTADOS } from '../contexts/LicenciaContext.js';
 import {
   obtenerRenglonesFiltrados,
   contarRenglonesFiltrados,
@@ -85,6 +86,7 @@ export default function PreliminaresScreen() {
   const [itemACambiar, setItemACambiar] = useState(null);
   const [objetosDeObra, setObjetosDeObra] = useState([]);
   const [objetoDestino, setObjetoDestino] = useState('');
+  const { lalicencia, licenciaEstado } = useLicencia();
 
   const cambiarObjetoDeObra = async (item) => {
     try {
@@ -981,8 +983,10 @@ export default function PreliminaresScreen() {
             setObjetoImportando(1);
             setImportModalVisible(true);
           }}
-          style={styles.importObjetoButton}
-          
+          style={[styles.importObjetoButton,
+                    (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }]
+                  }
+           disabled={lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled()}
         >
           <FontAwesome5
             name="file-import"
