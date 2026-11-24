@@ -31,32 +31,32 @@
       "androidStatusBar": {
         "backgroundColor": "#ffffff",
         "barStyle": "dark-content"
-      }      
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
     "plugins": [
-    [
-      "expo-sqlite",
-      {
-        "enableFTS": true,
-        "useSQLCipher": true,
-        "android": {
-         
-          "useSQLCipher": false
-        },
-        "ios": {
-          "customBuildFlags": [
-            "-DSQLITE_ENABLE_DBSTAT_VTAB=1 -DSQLITE_ENABLE_SNAPSHOT=1"
-          ]
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": true,
+          "useSQLCipher": true,
+          "android": {
+            "useSQLCipher": false
+          },
+          "ios": {
+            "customBuildFlags": [
+              "-DSQLITE_ENABLE_DBSTAT_VTAB=1 -DSQLITE_ENABLE_SNAPSHOT=1"
+            ]
+          }
         }
-      }
+      ],
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset"
     ],
-    "expo-router",
-    "expo-secure-store"
-  ],
     "owner": "alex6gomez77",
     "extra": {
       "eas": {
