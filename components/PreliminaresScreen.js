@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import DraggableFlatList from 'react-native-draggable-flatlist';
+import { Picker as NativePicker } from '@react-native-picker/picker';
 import { AppText as Text, AppTextInput as TextInput, AppPicker as Picker } from './AppText';
 
 import { commonStyles } from '../styles/commonStyles.js';
@@ -70,6 +71,22 @@ export default function PreliminaresScreen() {
     }
     return totales;
   }, [renglonesAsignados]);
+
+   // Función para determinar si las características premium están deshabilitadas
+    const isPremiumDisabled = () => {
+      switch (licenciaEstado) {
+        case LICENCIA_ESTADOS.SIN_LICENCIA:
+        case LICENCIA_ESTADOS.TRIAL_VENCIDA:
+        case LICENCIA_ESTADOS.ORIGINAL_VENCIDA:
+        case LICENCIA_ESTADOS.ERROR:
+          return true;
+        case LICENCIA_ESTADOS.TRIAL_ACTIVA:
+        case LICENCIA_ESTADOS.ORIGINAL_ACTIVA:
+          return false;
+        default:
+          return true;
+      }
+    };
 
   const costoTotalObra = useMemo(
     () => [...totalesPorObjeto.values()].reduce((total, costo) => total + costo, 0),
@@ -799,6 +816,7 @@ export default function PreliminaresScreen() {
       }
 
       const uri = res.assets[0].uri;
+    console.log('a importar: ', uri);
       let contenidoBase64;
       try {
         contenidoBase64 = await FileSystem.readAsStringAsync(uri, {
@@ -807,8 +825,9 @@ export default function PreliminaresScreen() {
       } catch (readError) {
         throw new Error('No se pudo leer el archivo Excel seleccionado.');
       }
+      
       const zip = new PizZip(contenidoBase64);
-
+console.log('llegó aquí');
       const workbookXml = zip.file('xl/workbook.xml')?.asText() || '';
       const sheetMatches =
         workbookXml.match(/<sheet[^>]*name="([^"]*)"[^>]*>/g) || [];
@@ -992,9 +1011,9 @@ export default function PreliminaresScreen() {
             setModalSeleccionarObjetoImportarVisible(true);
           }}
           style={[styles.importObjetoButton,
-                    (lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled() ) && { opacity: 0.3 }]
+                    isPremiumDisabled()  && { opacity: 0.3 }]
                   }
-           disabled={lalicencia?.licenseKey === 'TRIAL'  ||  isPremiumDisabled()}
+           disabled={isPremiumDisabled()}
         >
           <FontAwesome5
             name="file-import"
@@ -1260,14 +1279,14 @@ export default function PreliminaresScreen() {
               Selecciona el objeto de obra al que se importará el listado.
             </Text>
             <View style={styles.pickerWrapper}>
-              <Picker
+              <NativePicker
                 selectedValue={objetoImportando ?? ''}
                 onValueChange={(value) => setObjetoImportando(value)}
               >
                 {(objetosdeobras ?? []).map((oo) => (
-                  <Picker.Item key={oo.id} label={oo.objetodeobra} value={String(oo.id)} />
+                  <NativePicker.Item key={oo.id} label={oo.objetodeobra} value={String(oo.id)} />
                 ))}
-              </Picker>
+              </NativePicker>
             </View>
             <View
               style={{

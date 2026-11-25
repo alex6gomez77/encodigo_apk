@@ -5,7 +5,7 @@ const { withNativeWind } = require('nativewind/metro');
 const config = getDefaultConfig(__dirname);
 
 // ✅ EXTENDER (no reemplazar) las extensiones
-config.resolver.assetExts.push('bin', 'wasm');
+config.resolver.assetExts.push('bin', 'wasm', 'docx');
 
 // 1. Shim para anular el módulo 'crypto' de Node
 config.resolver.extraNodeModules = {
