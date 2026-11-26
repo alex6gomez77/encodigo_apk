@@ -791,197 +791,182 @@ export default function PreliminaresScreen() {
   };
 
   const importarCantidadesObjeto = async (objetodeobra_id_param) => {
-   
-    setObjetoImportando(objetodeobra_id_param);
-    setImportando(true);
-    setImportacionMensaje('');
-    setImportacionError('');
+  setObjetoImportando(objetodeobra_id_param);
+  setImportando(true);
+  setImportacionMensaje('');
+  setImportacionError('');
 
-    try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: [
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'application/zip',
-          '*/*',
-        ],
-        copyToCacheDirectory: true,
-      });
+  try {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/zip',
+        '*/*',
+      ],
+      copyToCacheDirectory: true,
+    });
 
-      
-
-      if (res.canceled || !res.assets || res.assets.length === 0) {
-        setImportando(false);
-        setObjetoImportando(null);
-        return;
-      }
-
-     const uri = res.assets[0].uri;
-      console.log('a importar: ', uri);
-      let contenidoBase64;
-
-      try {
-        // 1. Crear una ruta local en el caché de la app
-        const uriLocal = `${FileSystem.cacheDirectory}temp_import.xlsx`;
-        
-        // 2. Copiar el archivo desde el origen (content:// o similar) a la ruta local
-        await FileSystem.copyAsync({
-          from: uri,
-          to: uriLocal,
-        });
-        console.log('Archivo copiado a:', uriLocal);
-
-        // 3. Ahora sí, leer el archivo local con readAsStringAsync
-        contenidoBase64 = await FileSystem.readAsStringAsync(uriLocal, {
-          encoding: 'base64',
-        });
-
-        console.log('Contenido leído en base64, longitud:', contenidoBase64.length);
-      } catch (readError) {
-        console.error('Error detallado:', readError);
-        throw new Error('No se pudo leer el archivo Excel seleccionado.');
-      }
-
-      const zip = new PizZip(contenidoBase64, { base64: true });
-      console.log('llegó aquí');
-      const workbookXml = zip.file('xl/workbook.xml')?.asText() || '';
-      const sheetMatches =
-        workbookXml.match(/<sheet[^>]*name="([^"]*)"[^>]*>/g) || [];
-      const sheetNames = sheetMatches.map((m) => {
-        const match = m.match(/name="([^"]*)"/);
-        return match ? match[1] : '';
-      });
-
-       
-
-      let nombreDesdeHoja = sheetNames[0] || '';
-      let nombreObjetoFinal = 'default';
-      let objetodeobraIdFinal = objetodeobra_id_param;
-
-      if (nombreDesdeHoja.startsWith('LC-')) {
-        const nombreCandidato = nombreDesdeHoja.slice(3);
-        const objetoExistente = objetosdeobras?.find(
-          (o) => String(o.objetodeobra) === String(nombreCandidato)
-        );
-        if (objetoExistente) {
-          nombreObjetoFinal = nombreCandidato;
-          objetodeobraIdFinal = objetoExistente.id;
-        } else {
-          nombreObjetoFinal = nombreCandidato;
-          objetodeobraIdFinal = null;
-        }
-      } else {
-        nombreObjetoFinal = 'default';
-        objetodeobraIdFinal = null;
-      }
-
-      const sheetXml = zip.file('xl/worksheets/sheet1.xml')?.asText() || '';
-      const filas = sheetXml.match(/<row[^>]*>.*?<\/row>/gs) || [];
-
-      
-      const datosRenglones = [];
-      let enCabecera = false;
-
-      for (const filaXml of filas) {
-        const celdas = filaXml.match(/<c[^>]*>([\s\S]*?)<\/c>/g) || [];
-        const valoresFila = [];
-        
-        for (const celdaXml of celdas) {
-          let valor = '';
-          const inlineMatch = celdaXml.match(
-            /<is><t[^>]*>([\s\S]*?)<\/t><\/is>/
-          );
-          if (inlineMatch) {
-            valor = inlineMatch[1];
-          } else {
-            const vMatch = celdaXml.match(/<v>([\s\S]*?)<\/v>/);
-            if (vMatch) valor = vMatch[1];
-          }
-          valoresFila.push(valor);
-        }
-        console.log('valoresFila', valoresFila);
-        const filaTexto = valoresFila.join(' | ');
-        if (
-          filaTexto.includes('Descripción') ||
-          filaTexto.includes('Código')
-        ) {
-          enCabecera = true;
-          continue;
-        }
-
-        
-
-        if (!enCabecera) continue;
-
-        if (
-          valoresFila.length === 0 ||
-          valoresFila.every((v) => v.trim() === '')
-        )
-          continue;
-        
-        const codigoRC = (valoresFila[1] || '').trim();
-        const descripcion = (valoresFila[3] || '').trim();
-        const cantidadRaw = (valoresFila[4] || '').trim();
-        const precioRaw = (valoresFila[6] || '').trim();
-
-        if (!codigoRC && !descripcion) continue;
-
-        
-
-        const cantidadNum = Number(cantidadRaw) || 0;
-        const precioNum = Number(precioRaw) || 0;
-
-        datosRenglones.push({
-          IDRVariante: codigoRC,
-          RVariante: descripcion,
-          cantidad: cantidadNum,
-          precio: precioNum,
-          suministro_nombre: (valoresFila[2] || '').trim(),
-          IDSubEtapa: (valoresFila[0] || '').trim(),
-        });
-      }
-
-      if (datosRenglones.length === 0) {
-        throw new Error('No se encontraron renglones válidos en el archivo Excel.');
-      }
-
-     
-
-      const obraIdFinal = idObra || objetodeobraIdFinal;
-       console.log('llegó aquí 6', obraIdFinal, objetodeobraIdFinal,  datosRenglones);
-      for (const renglon of datosRenglones) {
-        // ✅ FIX 8: misma firma que handleAgregarRCalObra
-        console.log('insertando', renglon);
-        await agregarRCalObra(
-          db,
-          obraIdFinal,
-          renglon.IDSubEtapa,
-          objetodeobraIdFinal,
-          String(renglon.IDRVariante),
-          renglon.cantidad,
-          renglon.precio,
-          `Importado: ${renglon.RVariante || ''}`,
-          null,
-          renglon.um,
-          null,
-          renglon.cm
-        );
-      }
-
-      if (obraIdFinal) {
-        setRenglonesAsignados(await obtenerRenglonesAsignados(db, obraIdFinal));
-      }
-
-      setImportacionMensaje(
-        `Se importaron ${datosRenglones.length} renglón(es) correctamente.`
-      );
-    } catch (error) {
-      const detalle = error instanceof Error ? error.message : String(error);
-      setImportacionError(`No se pudo importar el listado. ${detalle}`);
-    } finally {
+    if (res.canceled || !res.assets || res.assets.length === 0) {
       setImportando(false);
       setObjetoImportando(null);
+      return;
     }
-  };
+
+    const uri = res.assets[0].uri;
+    let contenidoBase64;
+
+    try {
+      const uriLocal = `${FileSystem.cacheDirectory}temp_import.xlsx`;
+      await FileSystem.copyAsync({ from: uri, to: uriLocal });
+      contenidoBase64 = await FileSystem.readAsStringAsync(uriLocal, {
+        encoding: 'base64',
+      });
+    } catch (readError) {
+      console.error('Error detallado:', readError);
+      throw new Error('No se pudo leer el archivo Excel seleccionado.');
+    }
+
+    const zip = new PizZip(contenidoBase64, { base64: true });
+    const workbookXml = zip.file('xl/workbook.xml')?.asText() || '';
+    const sheetMatches = workbookXml.match(/<sheet[^>]*name="([^"]*)"[^>]*>/g) || [];
+    const sheetNames = sheetMatches.map((m) => {
+      const match = m.match(/name="([^"]*)"/);
+      return match ? match[1] : '';
+    });
+
+    let nombreDesdeHoja = sheetNames[0] || '';
+    let nombreObjetoFinal = 'default';
+    let objetodeobraIdFinal = objetodeobra_id_param; 
+
+    if (nombreDesdeHoja.startsWith('LC-')) {
+      const nombreCandidato = nombreDesdeHoja.slice(3).trim();
+      const objetoExistente = objetosdeobras?.find(
+        (o) => String(o.objetodeobra).trim() === String(nombreCandidato)
+      );
+      
+      if (objetoExistente) {
+        nombreObjetoFinal = nombreCandidato;
+        objetodeobraIdFinal = objetoExistente.id;
+      } else {
+        nombreObjetoFinal = nombreCandidato;
+      }
+    } else {
+      nombreObjetoFinal = 'default';
+    }
+
+    if (!objetodeobraIdFinal) {
+      throw new Error('No se pudo determinar el Objeto de Obra. Seleccione uno manualmente o revise el nombre de la hoja.');
+    }
+
+    const sheetXml = zip.file('xl/worksheets/sheet1.xml')?.asText() || '';
+    const filas = sheetXml.match(/<row[^>]*>.*?<\/row>/gs) || [];
+
+    const datosRenglones = [];
+    let enCabecera = false;
+    let montoTotalImportado = 0; // ✅ ACUMULADOR DE MONTO
+
+    for (const filaXml of filas) {
+      const celdas = filaXml.match(/<c[^>]*>([\s\S]*?)<\/c>/g) || [];
+      const valoresFila = [];
+      
+      for (const celdaXml of celdas) {
+        let valor = '';
+        const inlineMatch = celdaXml.match(/<is><t[^>]*>([\s\S]*?)<\/t><\/is>/);
+        if (inlineMatch) {
+          valor = inlineMatch[1];
+        } else {
+          const vMatch = celdaXml.match(/<v>([\s\S]*?)<\/v>/);
+          if (vMatch) valor = vMatch[1];
+        }
+        valoresFila.push(valor);
+      }
+
+      const filaTexto = valoresFila.join(' | ');
+      if (filaTexto.includes('Descripción') || filaTexto.includes('Código')) {
+        enCabecera = true;
+        continue;
+      }
+
+      if (!enCabecera) continue;
+      if (valoresFila.length === 0 || valoresFila.every((v) => v.trim() === '')) continue;
+      
+      const codigoRC = (valoresFila[1] || '').trim();
+      const descripcion = (valoresFila[3] || '').trim();
+      const cantidadRaw = (valoresFila[4] || '').trim();
+      const umRaw = (valoresFila[5] || '').trim();
+      const precioRaw = (valoresFila[6] || '').trim();
+
+      if (!codigoRC && !descripcion) continue;
+
+      const cantidadNum = Number(cantidadRaw) || 0;
+      const precioNum = Number(precioRaw) || 0;
+
+      // ✅ SUMAMOS AL TOTAL
+      montoTotalImportado += (cantidadNum * precioNum);
+
+      let codigoFinal = String(codigoRC);
+      if (codigoFinal.length === 5 && !codigoFinal.startsWith('0')) {
+         codigoFinal = '0' + codigoFinal;
+      }
+
+      datosRenglones.push({
+        IDRVariante: codigoFinal,
+        RVariante: descripcion,
+        cantidad: cantidadNum,
+        precio: precioNum,
+        suministro_nombre: (valoresFila[2] || '').trim(),
+        IDSubEtapa: (valoresFila[0] || '').trim(),
+        um: umRaw,
+      });
+    }
+
+    if (datosRenglones.length === 0) {
+      throw new Error('No se encontraron renglones válidos en el archivo Excel.');
+    }
+
+    const obraIdFinal = idObra;
+    
+    for (const renglon of datosRenglones) {
+      await agregarRCalObra(
+        db,
+        obraIdFinal,
+        renglon.IDSubEtapa,
+        objetodeobraIdFinal,
+        renglon.IDRVariante,
+        renglon.cantidad,
+        renglon.precio,
+        `Importado: ${renglon.RVariante || ''}`,
+        null,
+        renglon.um || 'u',
+        renglon.RVariante,
+        false
+      );
+    }
+
+    if (obraIdFinal) {
+      setRenglonesAsignados(await obtenerRenglonesAsignados(db, obraIdFinal));
+    }
+
+    // ✅ MOSTRAMOS LA VENTANA EMERGENTE CON EL RESUMEN
+    const mensajeResumen = `Se importaron correctamente ${datosRenglones.length} renglón(es) al objeto de obra "${nombreObjetoFinal}".\n\nMonto Total Importado: $${montoTotalImportado.toFixed(2)}`;
+    
+    setImportacionMensaje(`Se importaron ${datosRenglones.length} renglón(es) correctamente.`); // Por si tienes un texto en pantalla
+    
+    Alert.alert(
+      'Importación Exitosa',
+      mensajeResumen,
+      [{ text: 'OK' }]
+    );
+
+  } catch (error) {
+    const detalle = error instanceof Error ? error.message : String(error);
+    setImportacionError(`No se pudo importar el listado. ${detalle}`);
+    Alert.alert('Error de Importación', detalle);
+  } finally {
+    setImportando(false);
+    setObjetoImportando(null);
+  }
+};
 
   const preguntarDestinoExportacion = () => {
     setExportacionMensaje('');
@@ -1142,12 +1127,14 @@ export default function PreliminaresScreen() {
                 </RectButton>
               )}
             >
-              <Pressable onPress={() => router.push({ pathname: '/AgregarRenglonObra', 
+              <Pressable onPress={async () => {await activarObra(idObra);
+                                          router.push({ pathname: '/AgregarRenglonObra', 
                                                       params: { id: String(item.IDRVariante),
                                                       conMateriales: String(item.cm),
                                                       actualizar: true,
                                                       listadodecantidadesID: item.asignacion_id } }
                                                       )}
+                                                    }
               >
                 <View style={commonStyles.detallesItemContainer}>
                   <View style={{ flex: 1, flexDirection: 'row' }}>

@@ -54,6 +54,16 @@ export default function AgregarRenglonObraScreen() {
   const [cantidad, setCantidad] = useState('1');
   const [renglonesAsignados, setRenglonesAsignados] = useState('0');
   const [irAPreliminares, setIrAPreliminares] = useState(false);
+  const objetoModificadoRef = useRef(false);
+
+    // --- SINCRONIZACIÓN CON EL CONTEXTO DE OBJETO ---
+  useEffect(() => {
+    // Si el usuario selecciona un objeto nuevo en la pantalla de Objetos...
+    if (selectedObjeto?.id) {
+      // Forzamos la actualización del ID local para que al guardar use este
+      setObjetoDeObraId(selectedObjeto.id);
+    }
+  }, [selectedObjeto]);
   
   // Control de carga
   const [cargando, setCargando] = useState(true);
@@ -132,7 +142,7 @@ export default function AgregarRenglonObraScreen() {
           }
         }
 
-        console.log('Los Valores:', idVarianteParaBuscar, asignadoLocal, renglonBaseLocal);
+        
 
         if (!renglonBaseLocal) {
           throw new Error('No se encontraron los datos del renglón constructivo.');
@@ -180,11 +190,14 @@ export default function AgregarRenglonObraScreen() {
           // Forzamos String en la etapa
           setEtapaId(String(asignadoLocal.IDSubEtapa || etapaActiva?.IDSubEtapa || '1001'));
           
-          const objetoIdEdicion = asignadoLocal.objetodeobra_id ?? objetosCargados[0]?.id ?? null;
-          setObjetoDeObraId(objetoIdEdicion);
-          setSelectedObjeto(
-            objetosCargados.find(obj => String(obj.id) === String(objetoIdEdicion)) ?? null
-          );
+           // ✅ CORRECCIÓN AQUÍ: Solo seteamos el objeto si NO ha sido modificado manualmente
+          if (!objetoModificadoRef.current) {
+            const objetoIdEdicion = asignadoLocal.objetodeobra_id ?? objetosCargados[0]?.id ?? null;
+            setObjetoDeObraId(objetoIdEdicion);
+            setSelectedObjeto(
+              objetosCargados.find(obj => String(obj.id) === String(objetoIdEdicion)) ?? null
+            );
+          }
         } else {
           setRenglonAsignado(null);
           setEtapaId(String(etapaActiva?.IDSubEtapa || '1001'));
@@ -195,6 +208,8 @@ export default function AgregarRenglonObraScreen() {
             objetosCargados.find(obj => String(obj.id) === String(activoId)) ?? null
           );
         }
+
+        
 
       } catch (error) {
         const mensaje = error instanceof Error ? error.message : String(error);
@@ -246,9 +261,12 @@ export default function AgregarRenglonObraScreen() {
     return seleccionado?.objetodeobra || 'Seleccionar objeto de obra';
   }, [selectedObjeto, objetosDeObra, objetoDeObraId]);
 
-  const objetoDeObraSeleccionadoId = selectedObjeto?.id ?? objetoDeObraId;
+  //const objetoDeObraSeleccionadoId = selectedObjeto?.id ?? objetoDeObraId;
+    // Confía en el estado local, que se mantiene sincronizado con el contexto
+  const objetoDeObraSeleccionadoId = objetoDeObraId || selectedObjeto?.id;
 
   const seleccionarObjetoDeObra = () => {
+    objetoModificadoRef.current = true; // <--- Agrega esta línea
     router.push({
       pathname: '/Objetos',
       params: { seleccion: 'true' },
@@ -290,6 +308,13 @@ export default function AgregarRenglonObraScreen() {
       return;
     }
 
+    const objetoIdAGuardar = objetoDeObraId || selectedObjeto?.id;
+    
+    if (objetoIdAGuardar == null) {
+      Alert.alert('Validación', 'Seleccione un objeto de obra antes de continuar.');
+      return;
+    }
+
     // 2. Ejecutar guardado
     try {
       const nombreRecurso = selectedSuministro ? selectedSuministro.recurso : renglon.RVariante;
@@ -299,7 +324,7 @@ export default function AgregarRenglonObraScreen() {
           db,
           listadodecantidadesID,
           obraId,
-          objetoDeObraSeleccionadoId,
+          objetoIdAGuardar,
           etapaId,
           cantidadNumerica,
           precioUnitario,
@@ -314,7 +339,7 @@ export default function AgregarRenglonObraScreen() {
           db,
           obraId,
           etapaId,
-          objetoDeObraSeleccionadoId,
+          objetoIdAGuardar,
           renglon.IDRVariante,
           cantidadNumerica,
           precioUnitario,
@@ -327,7 +352,8 @@ export default function AgregarRenglonObraScreen() {
       }
 
       setSelectedSuministro(null);
-      setSelectedObjeto(null);
+      setSelectedObjeto(null); 
+      setObjetoDeObraId(null); // <-- También limpiamos el local
       
       Alert.alert(
         esEdicion ? 'Renglón actualizado' : 'Renglón añadido',

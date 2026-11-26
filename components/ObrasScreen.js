@@ -499,196 +499,7 @@ export default function ObrasScreen() {
     );
   }
 
-  /*
-  const exportarListado = async (destino) => {
-      setExportando(true);
-      setExportacionMensaje('');
-      setExportacionError('');
-   
-      try {
-
-        const obra_id = obraId;
-      // Obtener los datos de la Obra
-      const obraData = await db.getFirstAsync(`
-        SELECT obras.*, clientes.cliente
-        FROM obras        
-        LEFT JOIN clientes ON clientes.id = obras.cliente_id
-        WHERE obras.id = ?
-      `, [obra_id]);
-
-    const generales = await db.getFirstAsync('SELECT * FROM generales');
-     const losObjetosdeObra = await db.getAllAsync(`
-        SELECT
-           listadodecantidades. objetodeobra_id,
-            objetosdeobras.objetodeobra,
-            COUNT(*) as cantidad,
-            SUM(listadodecantidades.importe) as subtotal
-        FROM listadodecantidades
-        INNER JOIN objetosdeobras ON objetosdeobras.id = listadodecantidades.objetodeobra_id
-        WHERE listadodecantidades.obra_id = ?
-        GROUP BY listadodecantidades.objetodeobra_id
-        ORDER BY listadodecantidades.id
-      `, [obra_id]);
-
-    
-      const listadeCantidades = await db.getAllAsync(`
-        SELECT
-            listadodecantidades.*,
-            rvariantes.RVariante, recursos.Recurso
-        FROM listadodecantidades
-        INNER JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
-        LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
-        WHERE listadodecantidades.obra_id = ?
-      `, [obra_id]);
-
-
-      const fCodigo = obraData.codigo || '';
-      const fObra = obraData.obra || '';
-      const cliente = obraData.cliente || '';
-      const organismo = obraData.organismo || '';
-     
-      const data = {
-        // PAGINA # 1
-        obra1: fObra,       
-
-        codigo1: fCodigo,
-        elaboradopor: obraData.nombreelaborado || '',
-        cargoelaboradopor: obraData.cargoelaborado || '',
-        aprobadopor: obraData.nombreaprobado || '',
-        cargoaprobadopor: obraData.cargoaprobado || '',
-        fecha1: new Date().toLocaleDateString('es-ES'),
-   
-        'f4.1': ' ',
-        'f6.1': ' ',
-        'f7.1': ' ',
-        ref1: 'n/d',
-        empresa1: cliente,
-        organismo1: organismo,
-     
-      };
-
-     
   
-      
-      let gastototal = 0;
-      const objetosdeObras = losObjetosdeObra.reduce((acc, objetodeobra) => {
-        const listadoCantidades = listadeCantidades
-          .filter(f => String(f.objetodeobra_id) === String(objetodeobra.objetodeobra_id))
-          .map(f => ({            
-            codigo_sc: f.IDSobreGrupo,
-            seccion: f.SobreGrupo,
-            codigo_cp: f.IDGrupo,
-            capitulo: f.Grupo,
-            codigo_sb: f.IDSubGrupo,
-            subcapitulo: f.SubGrupo,
-            codigo_rc: f.IDRVariante,
-            descripcion_rc: f.descripcion,
-            cantidad_rc: Number(f.cantidad ?? 0).toFixed(2),
-            um_rc: f.um,
-            precio_rc:   Number(f.precio ?? 0).toFixed(2),
-            importe_rc: (Number(f.cantidad ?? 0) * Number(f.precio ?? 0)).toFixed(2),
-          }));
-        gastototal += Number(objetodeobra.subtotal ?? 0);
-        return [...acc, {
-          descripcion_oo: objetodeobra.objetodeobra,
-         // importe_oo: objetodeobra.subtotal.toFixed(2) || 0,
-          filas: listadoCantidades
-        }];
-      }, []);
-      data.objetosdeobra = objetosdeObras;
-        
-     
-        const asset = Asset.fromModule(require('../assets/listadodecantidades.docx'));
-        await asset.downloadAsync();
-        const assetUri = asset.localUri;
-        if (!assetUri) throw new Error('No se pudo obtener la ruta local del asset');
-
-        const fileInfo = await FileSystem.getInfoAsync(assetUri);
-        if (!fileInfo.exists) throw new Error('El archivo de plantilla no existe en: ' + assetUri);
-
-        const base64 = await FileSystem.readAsStringAsync(assetUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        if (!base64 || base64.length < 100) {
-          throw new Error('La plantilla DOCX está vacía o no se pudo leer correctamente.');
-        }
-
-        const zip = new PizZip(new Uint8Array(Buffer.from(base64, 'base64')));
-      const doc = new Docxtemplater(zip, {paragraphLoop:true,
-        linebreaks:true,
-      });
-      doc.render(data);
-      
-              
-      // Generar el nuevo documento en base64
-      const contenido = doc.getZip().generate({
-        type: 'base64',
-        //compression: 'DEFLATE',
-       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
-
-      // Guardar en el dispositivo
-      const nombreArchivo = `Listado_de_cantidades_${fCodigo || 'sin_codigo'}.docx`;
-    
-               
-        const tipoArchivo =
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  
-        if (destino === 'guardar' && Platform.OS === 'android') {
-          const permiso =
-            await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-          if (!permiso.granted) {
-            setExportacionError('No se seleccionó una carpeta para guardar el archivo.');
-            return;
-          }
-  
-          const uri = await FileSystem.StorageAccessFramework.createFileAsync(
-            permiso.directoryUri,
-            nombreArchivo
-          );
-          await FileSystem.writeAsStringAsync(uri, contenido, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          setExportacionMensaje('El documento se guardó en la carpeta seleccionada.');
-          return;
-        }
-  
-        const directorioCache = FileSystem.cacheDirectory;
-        if (!directorioCache) {
-          throw new Error('No está disponible la carpeta temporal para crear el archivo.');
-        }
-        const uri = `${directorioCache}${nombreArchivo}`;
-        await FileSystem.writeAsStringAsync(uri, contenido, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-  
-        if (!(await Sharing.isAvailableAsync())) {
-          throw new Error(
-            'No hay una aplicación disponible para compartir o guardar el archivo.'
-          );
-        }
-        await Sharing.shareAsync(uri, {
-          mimeType: tipoArchivo,
-          dialogTitle:
-            destino === 'guardar'
-              ? 'Guardar documento'
-              : 'Enviar listado de cantidades',
-          UTI: 'org.openxmlformats.wordprocessingml.document',
-        });
-        setExportacionMensaje(
-          destino === 'guardar'
-            ? 'Se abrió el selector para guardar el documento.'
-            : 'Se abrió el menú para compartir el archivo. Selecciona WhatsApp para enviarlo.'
-        );
-      } catch (error) {
-        const detalle = error instanceof Error ? error.message : String(error);
-        setExportacionError(`No se pudo generar o compartir el documento. ${detalle}`);
-      } finally {
-        setExportando(false);
-      }
-  };
-*/
 
 async function cargarPlantilla(data) {
   try {
@@ -737,7 +548,210 @@ async function cargarPlantilla(data) {
   }
 }
 
+const exportarListado = async (destino) => {
+  console.log('Iniciando exportación del listado de cantidades...');
+  setExportando(true);
+  setExportacionMensaje('');
+  setExportacionError('');
 
+  try {
+    const obra_id = obraId;
+
+    // 1. Consultas a la base de datos (igual que antes)
+    const obraData = await db.getFirstAsync(`
+      SELECT obras.*, clientes.cliente
+      FROM obras
+      LEFT JOIN clientes ON clientes.id = obras.cliente_id
+      WHERE obras.id = ?
+    `, [obra_id]);
+
+    if (!obraData) throw new Error('No se encontró la obra solicitada.');
+
+    const losObjetosdeObra = await db.getAllAsync(`
+      SELECT
+        listadodecantidades.objetodeobra_id,
+        objetosdeobras.objetodeobra,
+        SUM(listadodecantidades.precio * listadodecantidades.cantidad) AS subtotal
+      FROM listadodecantidades
+      INNER JOIN objetosdeobras ON objetosdeobras.id = listadodecantidades.objetodeobra_id
+      WHERE listadodecantidades.obra_id = ?
+      GROUP BY listadodecantidades.objetodeobra_id
+    `, [obra_id]);
+
+    const listadeCantidades = await db.getAllAsync(`
+      SELECT
+        listadodecantidades.*,
+        rvariantes.RVariante,
+        subgrupos.IDSubGrupo, subgrupos.SubGrupo,
+        grupos.IDGrupo, grupos.Grupo,
+        sobregrupos.IDSobreGrupo, sobregrupos.SobreGrupo,
+        subetapas.IDSubEtapa, subetapas.SubEtapa
+      FROM listadodecantidades
+      LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
+      LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
+      LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
+      LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
+      LEFT JOIN subetapas ON subetapas.IDSubEtapa = listadodecantidades.IDSubEtapa
+      WHERE listadodecantidades.obra_id = ?
+    `, [obra_id]);
+
+    // 2. Datos de cabecera
+    const fCodigo = obraData.codigo || '';
+    const fObra = obraData.obra || '';
+    const hoy = new Date();
+    const fecha1 = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
+   
+    const data = {
+      obra1: fObra,
+      codigo1: fCodigo,
+      elaboradopor: obraData.nombreelaborado || '',
+      cargoelaboradopor: obraData.cargoelaborado || '',
+      aprobadopor: obraData.nombreaprobado || '',
+      cargoaprobadopor: obraData.cargoaprobado || '',
+      fecha1,
+      fechahoy: fecha1
+    };
+
+    // 3. Agrupar por objeto de obra (Lógica adaptada a la plantilla)
+    let gastototal = 0;
+
+    const objetosdeObras = losObjetosdeObra.map(objetodeobra => {
+      // Filtramos los renglones que pertenecen a este objeto
+      const renglonesFiltrados = listadeCantidades.filter(
+        f => String(f.objetodeobra_id) === String(objetodeobra.objetodeobra_id)
+      );
+
+      // ✅ AQUÍ ESTÁ LA MAGIA: Docxtemplater necesita que los renglones estén
+      // dentro de un arreglo llamado "etapas" (como dice tu plantilla)
+      const etapas = renglonesFiltrados.map(f => {
+        const cantidad = Number(f.cantidad ?? 0);
+        const precio = Number(f.precio ?? 0);
+        return {
+          // Cabecera de Etapa
+          etapa: `${f.IDSubEtapa || ''} ${f.SubEtapa || ''}`,
+          
+          // Jerarquía
+          codigo_sc: f.IDSobreGrupo ?? '',
+          seccion: f.SobreGrupo ?? '',
+          codigo_cp: f.IDGrupo ?? '',
+          capitulo: f.Grupo ?? '',
+          codigo_sb: f.IDSubGrupo ?? '',
+          subcapitulo: f.SubGrupo ?? '',
+          
+          // Renglón Constructivo
+          codigo_rc: f.IDRVariante ?? '',
+          descripcion_rc: f.RVariante ?? '', // Usamos RVariante de la tabla, no 'descripcion'
+          cantidad_rc: cantidad.toFixed(2),
+          um_rc: f.um ?? '',
+          precio_rc: precio.toFixed(2),
+          importe_rc: (cantidad * precio).toFixed(2),
+          
+          // Suministro (si no hay, Docxtemplater dejará vacío o podemos poner guiones)
+          codigo_sm: '', 
+          descripcion_sm: '',
+          cantidad_sm: '',
+          um_sm: '',
+          precio_sm: '',
+          importe_sm: '',
+        };
+      });
+
+      gastototal += Number(objetodeobra.subtotal ?? 0);
+
+      return {
+        descripcion_oo: objetodeobra.objetodeobra,
+        importe_oo: Number(objetodeobra.subtotal ?? 0).toFixed(2),
+        etapas: etapas, // El arreglo que espera la plantilla
+      };
+    });
+
+    data.objetosdeobra = objetosdeObras;
+    data.gastototal = gastototal.toFixed(2);
+
+    // 4. Generar el documento desde base64 embebido
+    const asset = Asset.fromModule(require('../assets/listadodecantidades.docx'));
+    await asset.downloadAsync();
+    const localUri = asset.localUri;
+    
+    if (!localUri) throw new Error('No se pudo obtener la ruta local de la plantilla.');
+
+    const fileInfo = await FileSystem.getInfoAsync(localUri);
+    if (!fileInfo.exists) throw new Error('El archivo de plantilla no existe.');
+
+    const content = await FileSystem.readAsStringAsync(localUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    const zip = new PizZip(new Uint8Array(Buffer.from(content, 'base64')));
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+    
+    doc.render(data);
+
+    const contenido = doc.getZip().generate({
+      type: 'base64',
+      compression: 'DEFLATE',
+    });
+
+    // ✅ CORRECCIÓN: Usar fileName en lugar de nombreArchivo
+    const fileName = `obra_${fCodigo || 'sin_codigo'}.docx`;
+    const tipoArchivo = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    // 5. Guardar o compartir
+    if (destino === 'guardar' && Platform.OS === 'android') {          
+      const permiso = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+      if (!permiso.granted) {
+        setExportacionError('No se seleccionó una carpeta para guardar el archivo.');
+        return;
+      }
+
+      const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+        permiso.directoryUri,
+        fileName, // ✅ CORREGIDO
+        tipoArchivo
+      );
+
+      await FileSystem.writeAsStringAsync(uri, contenido, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      setExportacionMensaje('El documento se guardó satisfactoriamente.');
+      return;
+    }
+
+    // Compartir (o guardar en iOS)
+    const directorioCache = FileSystem.cacheDirectory;
+    if (!directorioCache) throw new Error('No está disponible la carpeta temporal.');
+
+    const uri = `${directorioCache}${fileName}`; // ✅ CORREGIDO
+
+    await FileSystem.writeAsStringAsync(uri, contenido, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    if (!(await Sharing.isAvailableAsync())) {
+      throw new Error('No hay una aplicación disponible para compartir.');
+    }
+
+    await Sharing.shareAsync(uri, {
+      mimeType: tipoArchivo,
+      dialogTitle: destino === 'guardar' ? 'Guardar documento' : 'Enviar listado',
+      UTI: 'org.openxmlformats.wordprocessingml.document',
+    });
+
+    setExportacionMensaje('Se abrió el menú para compartir el archivo.');
+
+  } catch (error) {
+    const detalle = error instanceof Error ? error.message : String(error);
+    setExportacionError(`No se pudo generar el documento. ${detalle}`);
+  } finally {
+    setExportando(false);
+  }
+};
+/*
   const exportarListado = async (destino) => {
     console.log('Iniciando exportación del listado de cantidades...');
     setExportando(true);
@@ -852,7 +866,7 @@ async function cargarPlantilla(data) {
           {
             descripcion_oo: objetodeobra.objetodeobra,
             importe_oo: Number(objetodeobra.subtotal ?? 0).toFixed(2),
-            filas: listadoCantidades,
+            etapas: listadoCantidades,
           },
         ];
       }, []);
@@ -976,99 +990,6 @@ async function cargarPlantilla(data) {
 
 
 
-
-
-
-      /*
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(fileUri, outputBase64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Compartir
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          dialogTitle: 'Compartir obra',
-        });
-      } else {
-      }
-        */
-
-
-
-
-
-/*
-      const doc = await cargarPlantilla();
-      doc.render(data);
-      const tipoArchivo =
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-      const contenido = doc.getZip().generate({
-        type: 'base64',
-        mimeType: tipoArchivo,
-      });
-
-      const nombreArchivo = `Listado_de_cantidades_${fCodigo || 'sin_codigo'}.docx`;
-
-      // ─────────────────────────────────────────────
-      // 5. Guardar o compartir
-      // ─────────────────────────────────────────────
-      if (destino === 'guardar' && Platform.OS === 'android') {          
-        const permiso = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-
-        if (!permiso.granted) {
-          setExportacionError('No se seleccionó una carpeta para guardar el archivo.');
-          return;
-        }
-
-        const uri = await FileSystem.StorageAccessFramework.createFileAsync(
-          permiso.directoryUri,
-          nombreArchivo,
-          tipoArchivo
-        );
-
-        await FileSystem.writeAsStringAsync(uri, contenido, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        
-        setExportacionMensaje('El documento se guardó satisfactoriamente.');
-        return;
-      }
-
-      // Compartir (o guardar en iOS)
-      const directorioCache = FileSystem.cacheDirectory;
-      if (!directorioCache) {
-        throw new Error('No está disponible la carpeta temporal para crear el archivo.');
-      }
-
-      const uri = `${directorioCache}${nombreArchivo}`;
-
-      await FileSystem.writeAsStringAsync(uri, contenido, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      if (!(await Sharing.isAvailableAsync())) {
-        throw new Error('No hay una aplicación disponible para compartir o guardar el archivo.');
-      }
-
-      await Sharing.shareAsync(uri, {
-        mimeType: tipoArchivo,
-        dialogTitle:
-          destino === 'guardar'
-            ? 'Guardar documento'
-            : 'Enviar listado de cantidades',
-        UTI: 'org.openxmlformats.wordprocessingml.document',
-      });
-
-      setExportacionMensaje(
-        destino === 'guardar'
-          ? 'Se abrió el selector para guardar el documento.'
-          : 'Se abrió el menú para compartir el archivo. Selecciona WhatsApp para enviarlo.'
-      );
-    */
-
     } catch (error) {
       const detalle = error instanceof Error ? error.message : String(error);
       setExportacionError(`No se pudo generar o compartir el documento. ${detalle}`);
@@ -1076,6 +997,7 @@ async function cargarPlantilla(data) {
       setExportando(false);
     }
   };
+*/
 
   async function handleSaveObra(obra) {
     Alert.alert('Debug', 'handleSaveObra ejecutado');
@@ -1152,45 +1074,7 @@ async function cargarPlantilla(data) {
   };
 
 
-  async function cargarPlantilla() {
-    try {
-      // 1. Cargar el archivo docx desde la carpeta assets
-      const asset = Asset.fromModule(require('../assets/listadodecantidades.docx'));
-      
-      // 2. Descargar/copiar el archivo a la caché local del dispositivo
-      await asset.downloadAsync();
-      
-      // 3. Obtener la ruta local real (file://...)
-      const localUri = asset.localUri;
-      if (!localUri) {
-        throw new Error('No se pudo obtener la ruta local del archivo');
-      }
-
-      // 4. Leer el contenido binario del archivo (la plantilla docx es un archivo ZIP)
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
-      if (!fileInfo.exists) {
-        throw new Error('El archivo de plantilla no existe en: ' + localUri);
-      }
-      const content = await FileSystem.readAsStringAsync(localUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      if (!content || content.length < 100) {
-        throw new Error('La plantilla DOCX está vacía o no se pudo leer correctamente.');
-      }
-
-      // 5. Convertir a formato PizZip y pasarlo a docxtemplater
-      const zip = new PizZip(new Uint8Array(Buffer.from(content, 'base64')));
-      const doc = new Docxtemplater(zip, {
-        paragraphLoop: true,
-        linebreaks: true,
-      });
-
-      return doc; // Esta plantilla doc está lista para usar
-    } catch (error) {
-      console.error('Error al cargar la plantilla:', error);
-    }
-  }
+  
   
   const handleExportarObraWORD = async (obra) => {
     try {
