@@ -646,12 +646,27 @@ const exportarListado = async (destino) => {
 
         const cantidad = Number(f.cantidad ?? 0);
         const precio = Number(f.precio ?? 0);
+        const importe = cantidad * precio;
         // ✅ Lógica para detectar si hay suministro
         // Si en tu base de datos el campo que indica el suministro (ej. f.IDRecurso o f.suministro_nombre) está vacío o es null, entonces no hay suministro.
         const tieneSuministro = !!(f.IDRecurso || f.suministro_nombre);
+
+        // Si tiene suministro, preparamos sus datos
+        const suministroData = tieneSuministro ? {
+          codigo_sm: f.IDRecurso ?? '',
+          descripcion_sm: f.Recurso ?? f.suministro_nombre ?? '',
+          // ✅ Duplicamos los valores del renglón constructivo
+          cantidad_sm: cantidad.toFixed(2),
+          um_sm: f.um ?? '',
+          precio_sm: precio.toFixed(2),
+          importe_sm: importe.toFixed(2),
+        } : null;
+
+
            
-        // Estructura del renglón individual
+                // Estructura del renglón individual
         etapasMap.get(etapaKey).renglones.push({
+          // Jerarquía
           codigo_sc: f.IDSobreGrupo ?? '',
           seccion: f.SobreGrupo ?? '',
           codigo_cp: f.IDGrupo ?? '',
@@ -659,27 +674,16 @@ const exportarListado = async (destino) => {
           codigo_sb: f.IDSubGrupo ?? '',
           subcapitulo: f.SubGrupo ?? '',
           
+          // Datos del Renglón
           codigo_rc: f.IDRVariante ?? '',
           descripcion_rc: f.RVariante ?? f.descripcion ?? '',
           cantidad_rc: cantidad.toFixed(2),
           um_rc: f.um ?? '',
           precio_rc: precio.toFixed(2),
-          importe_rc: (cantidad * precio).toFixed(2),
+          importe_rc: importe.toFixed(2),
           
-          // Suministro vacío (por ahora)
-          codigo_sm: '', descripcion_sm: '', cantidad_sm: '', 
-          um_sm: '', precio_sm: '', importe_sm: '',
-
-          // ✅ Condicional para la fila del suministro
-          
-          suministro: tieneSuministro ? {            
-            codigo_sm: f.IDRecurso ?? '',
-            descripcion_sm: f.suministro_nombre ?? f.Recurso ?? '',
-            cantidad_sm: f.cantidad_suministro?.toString() ?? cantidad.toFixed(2), // Ajusta a tu lógica
-            um_sm: f.um_suministro ?? '',
-            precio_sm: f.precio_suministro?.toFixed(2) ?? '0.00', // Ajusta a tu lógica
-            importe_sm: f.importe_suministro?.toFixed(2) ?? '0.00', // Ajusta a tu lógica
-          } : null, // <-- Si es null, docxtemplater oculta la fila
+          // ✅ Aquí inyectamos el suministro (o null si no hay)
+          suministro: suministroData
         });
       });
 
