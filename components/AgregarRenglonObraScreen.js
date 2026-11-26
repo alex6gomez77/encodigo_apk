@@ -22,7 +22,7 @@ import {
   activarEtapa,
   cantidadRenglonesAsignados,
   obtenerRenglonPorId,
-  obtenerRenglonAsignadoPorId,
+  obtenerRenglonAsignadoAlLCPorId,
 } from '../db/database';
 
 const LIMITE = 50;
@@ -31,14 +31,19 @@ export default function AgregarRenglonObraScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const renglonId = Array.isArray(params.id) ? params.id[0] : params.id;
-  const actualizarRC = params.actualizar;
+  
+  // Parámetros de navegación
+  const renglonId = Array.isArray(params.id) ? params.id[0] : params.id; 
+  const listadodecantidadesID = Array.isArray(params.listadodecantidadesID) ? params.listadodecantidadesID[0] : params.listadodecantidadesID;
   const conMateriales = String(params.conMateriales) === 'true';
+  
   const { licenciaEstado } = useLicencia();
   const { selectedSuministro, setSelectedSuministro } = useSuministroSelection();
   const { selectedObjeto, setSelectedObjeto } = useObjetoSelection();
+
+  // Estados de datos
   const [renglon, setRenglon] = useState(null);
-  const [renglonAsignado, setRenglonAsignado] = useState(null);
+  const [renglonAsignado, setRenglonAsignado] = useState(null); 
   const [obras, setObras] = useState([]);
   const [obraId, setObraId] = useState(null);
   const [obraNombre, setObraNombre] = useState('');
@@ -49,113 +54,167 @@ export default function AgregarRenglonObraScreen() {
   const [cantidad, setCantidad] = useState('1');
   const [renglonesAsignados, setRenglonesAsignados] = useState('0');
   const [irAPreliminares, setIrAPreliminares] = useState(false);
-  const datosCargadosRef = useRef(false);
-  const cantidadNumerica = Number(String(cantidad).trim().replace(',', '.'));
-  //const precioSuministro = Number(selectedSuministro?.Precio);
-  const precioSuministro = conMateriales ? Number(selectedSuministro?.MO * renglon?.Incremento + selectedSuministro?.EQ + selectedSuministro?.MA ?? 0) : Number(selectedSuministro?.MO * renglon?.Incremento + selectedSuministro?.EQ ?? 0);
-  const precioRC = conMateriales ? Number(renglon?.CDManoObra * renglon?.Incremento + renglon?.CDUsoEquipos + renglon?.CDMateriales ?? 0) : Number(renglon?.CDManoObra * renglon?.Incremento + renglon?.CDUsoEquipos ?? 0);
-  const precioUnitario = Number.isFinite(precioSuministro)
-    ? precioSuministro
-    : (Number.isFinite(precioRC) ? precioRC : 0);
-  const precioTotal = (Number.isFinite(cantidadNumerica) ? cantidadNumerica : 0) * precioUnitario;
-  const unidadCantidad = selectedSuministro?.umedicion
-    || selectedSuministro?.UM
-    || renglon?.umedicion
-    || '—';
+  
+  // Control de carga
+  const [cargando, setCargando] = useState(true);
 
+  // --- CÁLCULOS SEGUROS ---
+  const cantidadNumerica = Number(String(cantidad).trim().replace(',', '.')) || 0;
+  const incremento = Number(renglon?.Incremento ?? 1);
+  
+  const calcPrecioSuministro = () => {
+    if (!selectedSuministro) return 0;
+    const mo = Number(selectedSuministro.MO ?? 0);
+    const eq = Number(selectedSuministro.EQ ?? 0);
+    const ma = Number(selectedSuministro.MA ?? 0);
+    return conMateriales ? (mo * incremento + eq + ma) : (mo * incremento + eq);
+  };
+
+  const calcPrecioRC = () => {
+    if (!renglon) return 0;
+    const mo = Number(renglon.CDManoObra ?? 0);
+    const eq = Number(renglon.CDUsoEquipos ?? 0);
+    const ma = Number(renglon.CDMateriales ?? 0);
+    return conMateriales ? (mo * incremento + eq + ma) : (mo * incremento + eq);
+  };
+
+  const precioSuministro = calcPrecioSuministro();
+  const precioRC = calcPrecioRC();
+  const precioUnitario = selectedSuministro ? precioSuministro : precioRC;
+  const precioTotal = cantidadNumerica * precioUnitario;
+  const unidadCantidad = selectedSuministro?.umedicion || selectedSuministro?.UM || renglon?.umedicion || '—';
+
+  // --- CARGA DE DATOS ATÓMICA Y A PRUEBA DE BALAS ---
   useEffect(() => {
     let activo = true;
-    datosCargadosRef.current = false;
-    const cargarRenglon = async () => {
-      console.log('renglonId',renglonId);
-      if (!renglonId) return;
+
+    const cargarDatos = async () => {
+      if (!renglonId && !listadodecantidadesID) {
+        setCargando(false);
+        return;
+      }
+
       try {
-        // Intentar como asignacion_id (modo edición desde Preliminares)
-        const asignado = await obtenerRenglonAsignadoPorId(db, renglonId);
-        console.log('asignado',asignado);
+        setCargando(true);
         
-        if (activo && asignado?.IDRVariante) {
-          setRenglonAsignado(asignado);
-          const renglonCargado = await obtenerRenglonPorId(db, String(asignado.IDRVariante));
-          console.log('renglonCargado: ', renglonCargado);
-          if (activo) setRenglon(renglonCargado);
-        } else {
-          // Tratar renglonId como IDRVariante (modo agregar desde DetalleRenglon)
-          const renglonCargado = await obtenerRenglonPorId(db, renglonId);
-          if (activo) setRenglon(renglonCargado);
-          if (activo) setRenglonAsignado(null);
+        let idVarianteParaBuscar = renglonId;
+        let asignadoLocal = null;
+        let renglonBaseLocal = null;
+
+        // 1. Obtener datos de la BD en variables locales (sin setear estados aún)
+        if (listadodecantidadesID) {
+          asignadoLocal = await obtenerRenglonAsignadoAlLCPorId(db, listadodecantidadesID);
+          if (asignadoLocal) {
+            idVarianteParaBuscar = asignadoLocal.IDRVariante;
+          }
         }
+
+        /*
+        if (idVarianteParaBuscar) {
+          renglonBaseLocal = await obtenerRenglonPorId(db, String(idVarianteParaBuscar));
+        }
+          */
+
+              // ✅ AQUÍ ESTÁ LA MAGIA: Reconstruimos el cero a la izquierda si es necesario
+        if (idVarianteParaBuscar) {
+          let idString = String(idVarianteParaBuscar).trim();
+          
+          // Si el ID tiene 5 dígitos (ej. 72414), le ponemos el cero delante para que sean 6
+          // Ajusta el '6' al largo total que deben tener tus códigos (ej. si son 7, pon un 7)
+          if (idString.length === 5 && !idString.startsWith('0')) {
+             idString = '0' + idString;
+          }
+
+          try {
+             renglonBaseLocal = await obtenerRenglonPorId(db, idString);
+          } catch (e) {
+             renglonBaseLocal = null;
+          }
+        }
+
+        console.log('Los Valores:', idVarianteParaBuscar, asignadoLocal, renglonBaseLocal);
+
+        if (!renglonBaseLocal) {
+          throw new Error('No se encontraron los datos del renglón constructivo.');
+        }
+
+        // 2. Cargar catálogos usando las variables locales (NO el estado renglon)
+        const [
+          obrasCargadas,
+          obraActiva,
+          objetoActivo,
+          objetosCargados,
+          etapasCargadas,
+          etapaActiva,
+          losRenglonesAsignados
+        ] = await Promise.all([
+          obtenerObras(db),
+          obtenerObraActiva(db),
+          obtenerObjetodeobraActivo(db),
+          obtenerObjetosdeobras(db),
+          obtenerEtapas(db),
+          // Usamos renglonBaseLocal.IDSobreGrupo, no renglon?.IDSobreGrupo
+          activarEtapa(db, String(renglonBaseLocal?.IDSobreGrupo || '')), 
+          cantidadRenglonesAsignados(db),
+        ]);
+
+        if (!activo) return;
+
+        if (!Array.isArray(objetosCargados)) {
+          throw new Error('La consulta de objetos de obra no devolvió una lista válida.');
+        }
+
+        // 3. ¡SETEAMOS TODOS LOS ESTADOS DE GOLPE! (Carga atómica)
+        setObras(obrasCargadas);
+        setObraId(obraActiva?.id ?? null);
+        setObraNombre(obraActiva?.obra ?? '');
+        setObjetosDeObra(objetosCargados);
+        setEtapas(etapasCargadas);
+        setRenglonesAsignados(losRenglonesAsignados?.cantidad || 0);
+        setRenglon(renglonBaseLocal);
+
+        if (asignadoLocal) {
+          setRenglonAsignado(asignadoLocal);
+          setCantidad(String(asignadoLocal.cantidad ?? '1'));
+          
+          // Forzamos String en la etapa
+          setEtapaId(String(asignadoLocal.IDSubEtapa || etapaActiva?.IDSubEtapa || '1001'));
+          
+          const objetoIdEdicion = asignadoLocal.objetodeobra_id ?? objetosCargados[0]?.id ?? null;
+          setObjetoDeObraId(objetoIdEdicion);
+          setSelectedObjeto(
+            objetosCargados.find(obj => String(obj.id) === String(objetoIdEdicion)) ?? null
+          );
+        } else {
+          setRenglonAsignado(null);
+          setEtapaId(String(etapaActiva?.IDSubEtapa || '1001'));
+          
+          const activoId = objetoActivo?.objetodeobra_activo ?? objetosCargados[0]?.id ?? null;
+          setObjetoDeObraId(activoId);
+          setSelectedObjeto(
+            objetosCargados.find(obj => String(obj.id) === String(activoId)) ?? null
+          );
+        }
+
       } catch (error) {
         const mensaje = error instanceof Error ? error.message : String(error);
         if (activo) {
-          Alert.alert('Error', `No se pudo cargar el renglón. ${mensaje}`);
+          Alert.alert('Error', `No se pudieron cargar los datos. ${mensaje}`);
+          cerrar(); 
         }
+      } finally {
+        if (activo) setCargando(false);
       }
     };
-    cargarRenglon();
+
+    cargarDatos();
+
     return () => {
       activo = false;
     };
-  }, [db, renglonId]);
+  }, [db, renglonId, listadodecantidadesID]);
 
-  const cargarDatosObra = useCallback(async () => {    
-    if (datosCargadosRef.current ) return;
-    console.log('renglon',renglon);
-    try {
-      const [obrasCargadas, obraActiva, objetoActivo, objetosCargados, etapasCargadas, etapaActiva, losRenglonesAsignados] = await Promise.all([
-        obtenerObras(db),
-        obtenerObraActiva(db),
-        obtenerObjetodeobraActivo(db),
-        obtenerObjetosdeobras(db),
-        obtenerEtapas(db),
-        activarEtapa(db, String(renglon.IDSobreGrupo)),
-        cantidadRenglonesAsignados(db),
-      ]);
-      if (!Array.isArray(objetosCargados)) {
-        throw new Error('La consulta de objetos de obra no devolvió una lista válida.');
-      }
-      console.log('objetoActivo', objetoActivo, actualizarRC);
-      setObras(obrasCargadas);
-      setObraId(obraActiva?.id ?? null);
-      setObraNombre(obraActiva?.obra ?? '');
-      setObjetosDeObra(objetosCargados);
-      setEtapas(etapasCargadas);
-      setRenglonesAsignados(losRenglonesAsignados.cantidad);
-
-      // Modo edición: precargar valores del renglón existente
-     // if (renglonAsignado) {
-     console.log('renglonAsignado',renglonAsignado);
-      if (renglonAsignado) {
-        console.log('No estoy actualizando');
-        setCantidad(String(renglonAsignado.cantidad ?? '1'));
-        setEtapaId(renglonAsignado.IDSubEtapa ?? etapaActiva?.IDSubEtapa ?? '1001');
-        const objetoIdEdicion = renglonAsignado.objetodeobra_id ?? objetosCargados[0]?.id ?? null;
-        setObjetoDeObraId(objetoIdEdicion);
-        setSelectedObjeto(
-          objetosCargados.find(objeto => String(objeto.id) === String(objetoIdEdicion)) ??
-            null
-        );
-      } else {
-        const activoId =
-          objetoActivo?.objetodeobra_activo ?? objetosCargados[0]?.id ?? null;
-        setObjetoDeObraId(activoId);
-        setSelectedObjeto(
-          objetosCargados.find(objeto => String(objeto.id) === String(activoId)) ??
-            null
-        );
-      }
-      etapaActiva ? setEtapaId(etapaActiva.IDSubEtapa) : setEtapaId('1001');
-      datosCargadosRef.current = true;
-    } catch (error) {
-      const mensaje = error instanceof Error ? error.message : String(error);
-      Alert.alert('Error', `No se pudieron cargar los datos para agregar el renglón. ${mensaje}`);
-    }
-  }, [db, renglon, renglonAsignado]);
-
-  useEffect(() => {
-    cargarDatosObra();
-  }, [cargarDatosObra]);
-
+  // --- ACCIONES ---
   const isPremiumDisabled = () => {
     switch (licenciaEstado) {
       case LICENCIA_ESTADOS.SIN_LICENCIA:
@@ -171,14 +230,13 @@ export default function AgregarRenglonObraScreen() {
     }
   };
 
-  const cerrar = () => {
-    datosCargadosRef.current = false;
+  const cerrar = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/Principal');
     }
-  };
+  }, [router]);
 
   const objetoDeObraNombre = useMemo(() => {
     if (selectedObjeto?.objetodeobra) return selectedObjeto.objetodeobra;
@@ -198,82 +256,15 @@ export default function AgregarRenglonObraScreen() {
   };
 
   const actualizarEtapa = async value => {
-    try {
-      setEtapaId(value);
-    } catch (error) {
-      const mensaje = error instanceof Error ? error.message : String(error);
-      Alert.alert('Error', `No se pudo actualizar la Etapa. ${mensaje}`);
-    }
+    setEtapaId(value);
   };
 
-  const agregar = async () => {
-    if (obraId == null ) {
-      Alert.alert('Validación', 'Debe crear primero al menos una obra y activarla antes de continuar.');
+  const guardarRenglon = async (esEdicion) => {
+    // 1. Validaciones Críticas
+    if (!renglon || !renglon.IDRVariante) {
+      Alert.alert('Error', 'Los datos del renglón no están cargados.');
       return;
     }
-    if (objetoDeObraSeleccionadoId == null) {
-      Alert.alert('Validación', 'Seleccione un objeto de obra antes de continuar.');
-      return;
-    }
-    if (!Number.isFinite(cantidadNumerica) || cantidadNumerica <= 0) {
-      Alert.alert('Validación', 'Ingrese una cantidad válida mayor que cero.');
-      return;
-    }
-
-    const suministroId = selectedSuministro?.IDRecurso ?? null;
-    if (selectedSuministro && suministroId == null) {
-      Alert.alert('Error', 'El suministro seleccionado no tiene un código válido.');
-      return;
-    }
-
-    const obraseleccionado = obras.find(
-      obra => String(obra.id) === String(obraId)
-    );
-    if (!obraseleccionado) {
-      Alert.alert('Error', 'No se encontró la obra seleccionada.');
-      return;
-    }
-
-    try {
-      await agregarRCalObra(
-        db,
-        obraId,
-        etapaId,
-        objetoDeObraSeleccionadoId,
-        renglon.IDRVariante,
-        cantidadNumerica,
-        precioUnitario,
-        '',
-        suministroId,
-        unidadCantidad,
-        selectedSuministro ? selectedSuministro.recurso : renglon.RVariante,
-        conMateriales
-      );
-
-      setSelectedSuministro(null);
-      setSelectedObjeto(null);
-      Alert.alert(
-        'Renglón constructivo añadido',
-        `Se añadió con éxito el renglón constructivo ${renglon.IDRVariante} ${selectedSuministro ? ', con el suministro ' + selectedSuministro.IDRecurso : ''} a la obra ${obraNombre}.`
-      );
-
-      if (irAPreliminares) {
-        router.push({
-          pathname: '/Preliminares',
-          params: { obraId: String(obraseleccionado.id) },
-        });
-      } else if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/Principal');
-      }
-    } catch (error) {
-      const mensaje = error instanceof Error ? error.message : String(error);
-      Alert.alert('Error', `No se pudo asignar el renglón a la obra. ${mensaje}`);
-    }
-  };
-
-  const actualizar = async () => {
     if (obraId == null) {
       Alert.alert('Validación', 'Debe crear primero al menos una obra y activarla antes de continuar.');
       return;
@@ -293,35 +284,54 @@ export default function AgregarRenglonObraScreen() {
       return;
     }
 
-    const obraseleccionado = obras.find(
-      obra => String(obra.id) === String(obraId)
-    );
+    const obraseleccionado = obras.find(obra => String(obra.id) === String(obraId));
     if (!obraseleccionado) {
       Alert.alert('Error', 'No se encontró la obra seleccionada.');
       return;
     }
 
+    // 2. Ejecutar guardado
     try {
-      await actualizarRenglonObra(
-        db,
-        renglonId,
-        obraId,
-        objetoDeObraSeleccionadoId,
-        etapaId,
-        cantidadNumerica,
-        precioUnitario,
-        '',
-        suministroId,
-        unidadCantidad,
-        selectedSuministro ? selectedSuministro.recurso : renglon.RVariante,
-        conMateriales
-      );
+      const nombreRecurso = selectedSuministro ? selectedSuministro.recurso : renglon.RVariante;
+
+      if (esEdicion && renglonAsignado) {
+        await actualizarRenglonObra(
+          db,
+          listadodecantidadesID,
+          obraId,
+          objetoDeObraSeleccionadoId,
+          etapaId,
+          cantidadNumerica,
+          precioUnitario,
+          '',
+          suministroId,
+          unidadCantidad,
+          nombreRecurso,
+          conMateriales
+        );
+      } else {
+        await agregarRCalObra(
+          db,
+          obraId,
+          etapaId,
+          objetoDeObraSeleccionadoId,
+          renglon.IDRVariante,
+          cantidadNumerica,
+          precioUnitario,
+          '',
+          suministroId,
+          unidadCantidad,
+          nombreRecurso,
+          conMateriales
+        );
+      }
 
       setSelectedSuministro(null);
       setSelectedObjeto(null);
+      
       Alert.alert(
-        'Renglón actualizado',
-        `Se actualizó con éxito el renglón constructivo ${renglon.IDRVariante} ${selectedSuministro ? ', con el suministro ' + selectedSuministro.IDRecurso : ''} en la obra ${obraNombre}.`
+        esEdicion ? 'Renglón actualizado' : 'Renglón añadido',
+        `Se ${esEdicion ? 'actualizó' : 'añadió'} con éxito el renglón ${renglon.IDRVariante} ${selectedSuministro ? 'con el suministro ' + selectedSuministro.IDRecurso : ''} a la obra ${obraNombre}.`
       );
 
       if (irAPreliminares) {
@@ -329,37 +339,59 @@ export default function AgregarRenglonObraScreen() {
           pathname: '/Preliminares',
           params: { obraId: String(obraseleccionado.id) },
         });
-      } else if (router.canGoBack()) {
-        router.back();
       } else {
-        router.replace('/Principal');
+        cerrar();
       }
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
-      Alert.alert('Error', `No se pudo actualizar el renglón en la obra. ${mensaje}`);
+      Alert.alert('Error', `No se pudo ${esEdicion ? 'actualizar' : 'asignar'} el renglón. ${mensaje}`);
     }
   };
 
+  const handleAgregarOActualizar = () => {
+    if (!isPremiumDisabled() && !renglonAsignado && Number(renglonesAsignados) >= LIMITE) {
+      Alert.alert(
+        'Límite de Renglones alcanzado',
+        `Has asignado ya el máximo de Renglones Constructivos permitidos para una Obra (${LIMITE}). Actualiza a Premium continuar asignando Renglones ilimitados.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ir a Zona de Licencia', onPress: () => router.push('/Licencia') }
+        ]
+      );
+      return;
+    }
+    guardarRenglon(!!renglonAsignado);
+  };
+
+  if (cargando) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Cargando datos...</Text>
+      </View>
+    );
+  }
+
+  // --- RENDERIZADO ---
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title={renglonAsignado ? 'EDITANDO RENGLÓN DE LA OBRA' : 'AGREGANDO RENGLÓN A LA OBRA'}
+        title={renglonAsignado ? 'ACTUALIZANDO RENGLÓN DE LA OBRA' : 'AGREGANDO RENGLÓN A LA OBRA'}
         onBack={cerrar}
       />
  
       {!!obraId && <Text style={styles.headerText}>{obraNombre.toUpperCase()}</Text>}              
-            <View style={{textAlign: 'right', alignItems: 'flex-end', paddingHorizontal: 5, backgroundColor: '#4b86b4', marginHorizontal: 20, borderRadius: 5}}>
-            <View style={styles.checkboxRow}>                            
-            {conMateriales ?
-              <Text style={{color: '#ffffff', fontWeight: 'bold'}} > INCLUYENDO LOS MATERIALES</Text>
-              :
-              <Text style={{color: '#fffb00', fontWeight: 'bold'}} >SIN MATERIALES</Text>
-              }
-          </View>
-          <Text style={{color: '#ffffff',fontSize: 12, fontWeight: 'bold' }}>{renglon?.perfilsalarial}</Text>
-        </View>  
+      <View style={{textAlign: 'right', alignItems: 'flex-end', paddingHorizontal: 5, backgroundColor: '#4b86b4', marginHorizontal: 20, borderRadius: 5}}>
+        <View style={styles.checkboxRow}>                            
+          {conMateriales ?
+            <Text style={{color: '#ffffff', fontWeight: 'bold'}} >INCLUYENDO LOS MATERIALES</Text>
+            :
+            <Text style={{color: '#fffb00', fontWeight: 'bold'}} >SIN MATERIALES</Text>
+          }
+        </View>
+        <Text style={{color: '#ffffff',fontSize: 12, fontWeight: 'bold' }}>{renglon?.perfilsalarial}</Text>
+      </View>  
+      
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
-       
         <View style={styles.renglonInfo}>
           <Text style={styles.hierarchyText}>
              {renglon?.SobreGrupo || 'Sin sección'} | {renglon?.Grupo || 'Sin capítulo'} | {renglon?.SubGrupo || 'Sin subcapítulo'}
@@ -373,10 +405,8 @@ export default function AgregarRenglonObraScreen() {
             </Text>
           </View>
           <Text style={[styles.renglonPrice, selectedSuministro && { opacity: 0.3, textDecorationLine: 'line-through' }]}>
-            Precio: ${Number(precioRC ?? 0).toFixed(2)}  | Unidad: {renglon?.umedicion || '—'} 
-            
+            Precio: ${precioRC.toFixed(2)}  | Unidad: {renglon?.umedicion || '—'} 
           </Text>
-         
         </View>
 
         <View style={styles.formSection}>
@@ -400,13 +430,9 @@ export default function AgregarRenglonObraScreen() {
                   {`${selectedSuministro.Recurso} | Código: ${selectedSuministro.IDRecurso} | ${selectedSuministro.tiporecurso || 'Suministro'}  `}
                 </Text>
                 <Text style={[styles.supplyDetails, {color: 'black', fontSize: 14}]}>
-                 Precio: ${ conMateriales ?
-                        `${Number(selectedSuministro.MO * renglon?.Incremento + selectedSuministro.EQ + selectedSuministro.MA ?? 0).toFixed(2)} `
-                      :
-                          `${Number(selectedSuministro.MO * renglon?.Incremento + selectedSuministro.EQ ?? 0).toFixed(2)} `
-                      } 
-                      {` | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'}`}</Text>
-
+                 Precio: ${precioSuministro.toFixed(2)} 
+                 {` | Unidad: ${selectedSuministro.umedicion || selectedSuministro.UM || '—'}`}
+                </Text>
               </View>
             </>
           )}
@@ -421,9 +447,9 @@ export default function AgregarRenglonObraScreen() {
                 <Picker.Item label="No hay etapas disponibles" value={null} enabled={false} />
               ) : etapas.map(objeto => (
                 <Picker.Item
-                  key={objeto.IDSubEtapa}
+                  key={String(objeto.IDSubEtapa)}
                   label={objeto.IDSubEtapa + " " + objeto.SubEtapa}
-                  value={objeto.IDSubEtapa}
+                  value={String(objeto.IDSubEtapa)}
                   style={styles.pickerItem}
                 />
               ))}
@@ -445,7 +471,6 @@ export default function AgregarRenglonObraScreen() {
 
           <View style={{flexDirection: 'column'}}>
             <Text style={styles.label}>Cantidad</Text>
-
             <View style={styles.quantityInputRow}>
               <TextInput
                 style={[styles.input, styles.quantityInput]}
@@ -479,27 +504,13 @@ export default function AgregarRenglonObraScreen() {
             </View>
 
             <View style={commonStyles.buttonsRow}>
-              <TouchableOpacity style={commonStyles.buttonAgregar}
-                onPress={() => {
-                if (!isPremiumDisabled() && renglonesAsignados >= LIMITE) {
-                Alert.alert(
-                  'Límite de Renglones alcanzado',
-                  `Has asignado ya el máximo de Renglones Constructivos permitidos para una Obra (${LIMITE}). Actualiza a Premium continuar asignando Renglones ilimitados.`,
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                      text: 'Ir a Zona de Licencia',
-                      onPress: () => router.push('/Licencia'),
-                      style: 'default'
-                    }
-                  ]
-                );
-                } else {
-                  actualizarRC ? actualizar() : agregar();
-                }
-              }}
+              <TouchableOpacity 
+                style={commonStyles.buttonAgregar}
+                onPress={handleAgregarOActualizar}
               >
-                <Text style={commonStyles.buttonTextAgregar}>{actualizarRC ? 'Actualizar' : 'Agregar'}</Text>
+                <Text style={commonStyles.buttonTextAgregar}>
+                  {renglonAsignado ? 'Actualizar' : 'Agregar'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -673,8 +684,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   headerText: {
-    //color: '#192f6a',
     marginLeft: 15,
     fontWeight: 'bold',
+    paddingHorizontal: 5
   },
 });

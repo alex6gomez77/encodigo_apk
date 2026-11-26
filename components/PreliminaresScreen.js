@@ -877,13 +877,14 @@ export default function PreliminaresScreen() {
       const sheetXml = zip.file('xl/worksheets/sheet1.xml')?.asText() || '';
       const filas = sheetXml.match(/<row[^>]*>.*?<\/row>/gs) || [];
 
+      
       const datosRenglones = [];
       let enCabecera = false;
 
       for (const filaXml of filas) {
         const celdas = filaXml.match(/<c[^>]*>([\s\S]*?)<\/c>/g) || [];
         const valoresFila = [];
-
+        
         for (const celdaXml of celdas) {
           let valor = '';
           const inlineMatch = celdaXml.match(
@@ -897,7 +898,7 @@ export default function PreliminaresScreen() {
           }
           valoresFila.push(valor);
         }
-
+        console.log('valoresFila', valoresFila);
         const filaTexto = valoresFila.join(' | ');
         if (
           filaTexto.includes('Descripción') ||
@@ -907,19 +908,24 @@ export default function PreliminaresScreen() {
           continue;
         }
 
+        
+
         if (!enCabecera) continue;
+
         if (
           valoresFila.length === 0 ||
           valoresFila.every((v) => v.trim() === '')
         )
           continue;
-
+        
         const codigoRC = (valoresFila[1] || '').trim();
         const descripcion = (valoresFila[3] || '').trim();
         const cantidadRaw = (valoresFila[4] || '').trim();
         const precioRaw = (valoresFila[6] || '').trim();
 
         if (!codigoRC && !descripcion) continue;
+
+        
 
         const cantidadNum = Number(cantidadRaw) || 0;
         const precioNum = Number(precioRaw) || 0;
@@ -938,19 +944,26 @@ export default function PreliminaresScreen() {
         throw new Error('No se encontraron renglones válidos en el archivo Excel.');
       }
 
+     
+
       const obraIdFinal = idObra || objetodeobraIdFinal;
-      
+       console.log('llegó aquí 6', obraIdFinal, objetodeobraIdFinal,  datosRenglones);
       for (const renglon of datosRenglones) {
         // ✅ FIX 8: misma firma que handleAgregarRCalObra
+        console.log('insertando', renglon);
         await agregarRCalObra(
           db,
           obraIdFinal,
           renglon.IDSubEtapa,
           objetodeobraIdFinal,
-          renglon.IDRVariante,
+          String(renglon.IDRVariante),
           renglon.cantidad,
           renglon.precio,
-          `Importado: ${renglon.RVariante || ''}`
+          `Importado: ${renglon.RVariante || ''}`,
+          null,
+          renglon.um,
+          null,
+          renglon.cm
         );
       }
 
@@ -1130,9 +1143,10 @@ export default function PreliminaresScreen() {
               )}
             >
               <Pressable onPress={() => router.push({ pathname: '/AgregarRenglonObra', 
-                                                      params: { id: String(item.asignacion_id),
+                                                      params: { id: String(item.IDRVariante),
                                                       conMateriales: String(item.cm),
-                                                      actualizar: true } }
+                                                      actualizar: true,
+                                                      listadodecantidadesID: item.asignacion_id } }
                                                       )}
               >
                 <View style={commonStyles.detallesItemContainer}>

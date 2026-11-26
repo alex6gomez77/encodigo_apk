@@ -772,7 +772,7 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
 };
 
 // Función para obtener un renglón asignado específico por su ID de asignación
-export const obtenerRenglonAsignadoPorId = (db, asignacionId) => {  
+export const obtenerRenglonAsignadoAlLCPorId = (db, asignacionId) => {  
   return db.getFirstAsync(
     `SELECT listadodecantidades.id AS asignacion_id,
             listadodecantidades.obra_id,

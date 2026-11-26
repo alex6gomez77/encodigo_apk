@@ -80,7 +80,8 @@ export default function DetalleRenglonScreen() {
       params: {
         id: String(renglon.IDRVariante),
         conMateriales: String(conMateriales),
-        actualizar: false
+        actualizar: false,
+        listadodecantidadesID: null,
       },
     });
   };
