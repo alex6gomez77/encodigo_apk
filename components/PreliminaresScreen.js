@@ -118,7 +118,6 @@ export default function PreliminaresScreen() {
   };
 
   const activarObra = async (id) => {
-    console.log('Activando la Obra ', id);
     try {
       await establecerObraActiva(db, id);
     } catch (error) {
