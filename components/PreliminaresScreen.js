@@ -815,19 +815,34 @@ export default function PreliminaresScreen() {
         return;
       }
 
-      const uri = res.assets[0].uri;
-    console.log('a importar: ', uri);
+     const uri = res.assets[0].uri;
+      console.log('a importar: ', uri);
       let contenidoBase64;
+
       try {
-        contenidoBase64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
+        // 1. Crear una ruta local en el caché de la app
+        const uriLocal = `${FileSystem.cacheDirectory}temp_import.xlsx`;
+        
+        // 2. Copiar el archivo desde el origen (content:// o similar) a la ruta local
+        await FileSystem.copyAsync({
+          from: uri,
+          to: uriLocal,
         });
+        console.log('Archivo copiado a:', uriLocal);
+
+        // 3. Ahora sí, leer el archivo local con readAsStringAsync
+        contenidoBase64 = await FileSystem.readAsStringAsync(uriLocal, {
+          encoding: 'base64',
+        });
+
+        console.log('Contenido leído en base64, longitud:', contenidoBase64.length);
       } catch (readError) {
+        console.error('Error detallado:', readError);
         throw new Error('No se pudo leer el archivo Excel seleccionado.');
       }
-      
-      const zip = new PizZip(contenidoBase64);
-console.log('llegó aquí');
+
+      const zip = new PizZip(contenidoBase64, { base64: true });
+      console.log('llegó aquí');
       const workbookXml = zip.file('xl/workbook.xml')?.asText() || '';
       const sheetMatches =
         workbookXml.match(/<sheet[^>]*name="([^"]*)"[^>]*>/g) || [];
@@ -1114,7 +1129,12 @@ console.log('llegó aquí');
                 </RectButton>
               )}
             >
-              <Pressable onPress={() => abrirModalDetalles(item)}>
+              <Pressable onPress={() => router.push({ pathname: '/AgregarRenglonObra', 
+                                                      params: { id: String(item.asignacion_id),
+                                                      conMateriales: String(item.cm),
+                                                      actualizar: true } }
+                                                      )}
+              >
                 <View style={commonStyles.detallesItemContainer}>
                   <View style={{ flex: 1, flexDirection: 'row' }}>
                     <Text style={styles.subetapa}>

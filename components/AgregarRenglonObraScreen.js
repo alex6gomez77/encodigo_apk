@@ -13,6 +13,7 @@ import { useSuministroSelection } from '../contexts/SuministroSelectionContext';
 import { useObjetoSelection } from '../contexts/ObjetoSelectionContext';
 import {
   agregarRCalObra,
+  actualizarRenglonObra,
   obtenerObjetodeobraActivo,
   obtenerObjetosdeobras,
   obtenerObraActiva,
@@ -21,6 +22,7 @@ import {
   activarEtapa,
   cantidadRenglonesAsignados,
   obtenerRenglonPorId,
+  obtenerRenglonAsignadoPorId,
 } from '../db/database';
 
 const LIMITE = 50;
@@ -30,11 +32,13 @@ export default function AgregarRenglonObraScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const renglonId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const actualizarRC = params.actualizar;
   const conMateriales = String(params.conMateriales) === 'true';
   const { licenciaEstado } = useLicencia();
   const { selectedSuministro, setSelectedSuministro } = useSuministroSelection();
   const { selectedObjeto, setSelectedObjeto } = useObjetoSelection();
   const [renglon, setRenglon] = useState(null);
+  const [renglonAsignado, setRenglonAsignado] = useState(null);
   const [obras, setObras] = useState([]);
   const [obraId, setObraId] = useState(null);
   const [obraNombre, setObraNombre] = useState('');
@@ -61,11 +65,26 @@ export default function AgregarRenglonObraScreen() {
 
   useEffect(() => {
     let activo = true;
+    datosCargadosRef.current = false;
     const cargarRenglon = async () => {
+      console.log('renglonId',renglonId);
       if (!renglonId) return;
       try {
-        const renglonCargado = await obtenerRenglonPorId(db, renglonId);
-        if (activo) setRenglon(renglonCargado);
+        // Intentar como asignacion_id (modo edición desde Preliminares)
+        const asignado = await obtenerRenglonAsignadoPorId(db, renglonId);
+        console.log('asignado',asignado);
+        
+        if (activo && asignado?.IDRVariante) {
+          setRenglonAsignado(asignado);
+          const renglonCargado = await obtenerRenglonPorId(db, String(asignado.IDRVariante));
+          console.log('renglonCargado: ', renglonCargado);
+          if (activo) setRenglon(renglonCargado);
+        } else {
+          // Tratar renglonId como IDRVariante (modo agregar desde DetalleRenglon)
+          const renglonCargado = await obtenerRenglonPorId(db, renglonId);
+          if (activo) setRenglon(renglonCargado);
+          if (activo) setRenglonAsignado(null);
+        }
       } catch (error) {
         const mensaje = error instanceof Error ? error.message : String(error);
         if (activo) {
@@ -79,8 +98,9 @@ export default function AgregarRenglonObraScreen() {
     };
   }, [db, renglonId]);
 
-  const cargarDatosObra = useCallback(async () => {
-    if (datosCargadosRef.current || !renglon) return;
+  const cargarDatosObra = useCallback(async () => {    
+    if (datosCargadosRef.current ) return;
+    console.log('renglon',renglon);
     try {
       const [obrasCargadas, obraActiva, objetoActivo, objetosCargados, etapasCargadas, etapaActiva, losRenglonesAsignados] = await Promise.all([
         obtenerObras(db),
@@ -88,34 +108,49 @@ export default function AgregarRenglonObraScreen() {
         obtenerObjetodeobraActivo(db),
         obtenerObjetosdeobras(db),
         obtenerEtapas(db),
-        activarEtapa(db, renglon.IDSobreGrupo),
+        activarEtapa(db, String(renglon.IDSobreGrupo)),
         cantidadRenglonesAsignados(db),
       ]);
       if (!Array.isArray(objetosCargados)) {
         throw new Error('La consulta de objetos de obra no devolvió una lista válida.');
       }
-
+      console.log('objetoActivo', objetoActivo, actualizarRC);
       setObras(obrasCargadas);
       setObraId(obraActiva?.id ?? null);
       setObraNombre(obraActiva?.obra ?? '');
       setObjetosDeObra(objetosCargados);
       setEtapas(etapasCargadas);
       setRenglonesAsignados(losRenglonesAsignados.cantidad);
-      const activoId =
-        objetoActivo?.objetodeobra_activo ?? objetosCargados[0]?.id ?? null;
-      setObjetoDeObraId(activoId);
-      setSelectedObjeto(
-        objetosCargados.find(objeto => String(objeto.id) === String(activoId)) ??
-          null
-      );
-      console.log('etapaActiva',etapaActiva);
+
+      // Modo edición: precargar valores del renglón existente
+     // if (renglonAsignado) {
+     console.log('renglonAsignado',renglonAsignado);
+      if (renglonAsignado) {
+        console.log('No estoy actualizando');
+        setCantidad(String(renglonAsignado.cantidad ?? '1'));
+        setEtapaId(renglonAsignado.IDSubEtapa ?? etapaActiva?.IDSubEtapa ?? '1001');
+        const objetoIdEdicion = renglonAsignado.objetodeobra_id ?? objetosCargados[0]?.id ?? null;
+        setObjetoDeObraId(objetoIdEdicion);
+        setSelectedObjeto(
+          objetosCargados.find(objeto => String(objeto.id) === String(objetoIdEdicion)) ??
+            null
+        );
+      } else {
+        const activoId =
+          objetoActivo?.objetodeobra_activo ?? objetosCargados[0]?.id ?? null;
+        setObjetoDeObraId(activoId);
+        setSelectedObjeto(
+          objetosCargados.find(objeto => String(objeto.id) === String(activoId)) ??
+            null
+        );
+      }
       etapaActiva ? setEtapaId(etapaActiva.IDSubEtapa) : setEtapaId('1001');
       datosCargadosRef.current = true;
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
       Alert.alert('Error', `No se pudieron cargar los datos para agregar el renglón. ${mensaje}`);
     }
-  }, [db, renglon]);
+  }, [db, renglon, renglonAsignado]);
 
   useEffect(() => {
     cargarDatosObra();
@@ -238,10 +273,77 @@ export default function AgregarRenglonObraScreen() {
     }
   };
 
+  const actualizar = async () => {
+    if (obraId == null) {
+      Alert.alert('Validación', 'Debe crear primero al menos una obra y activarla antes de continuar.');
+      return;
+    }
+    if (objetoDeObraSeleccionadoId == null) {
+      Alert.alert('Validación', 'Seleccione un objeto de obra antes de continuar.');
+      return;
+    }
+    if (!Number.isFinite(cantidadNumerica) || cantidadNumerica <= 0) {
+      Alert.alert('Validación', 'Ingrese una cantidad válida mayor que cero.');
+      return;
+    }
+
+    const suministroId = selectedSuministro?.IDRecurso ?? null;
+    if (selectedSuministro && suministroId == null) {
+      Alert.alert('Error', 'El suministro seleccionado no tiene un código válido.');
+      return;
+    }
+
+    const obraseleccionado = obras.find(
+      obra => String(obra.id) === String(obraId)
+    );
+    if (!obraseleccionado) {
+      Alert.alert('Error', 'No se encontró la obra seleccionada.');
+      return;
+    }
+
+    try {
+      await actualizarRenglonObra(
+        db,
+        renglonId,
+        obraId,
+        objetoDeObraSeleccionadoId,
+        etapaId,
+        cantidadNumerica,
+        precioUnitario,
+        '',
+        suministroId,
+        unidadCantidad,
+        selectedSuministro ? selectedSuministro.recurso : renglon.RVariante,
+        conMateriales
+      );
+
+      setSelectedSuministro(null);
+      setSelectedObjeto(null);
+      Alert.alert(
+        'Renglón actualizado',
+        `Se actualizó con éxito el renglón constructivo ${renglon.IDRVariante} ${selectedSuministro ? ', con el suministro ' + selectedSuministro.IDRecurso : ''} en la obra ${obraNombre}.`
+      );
+
+      if (irAPreliminares) {
+        router.push({
+          pathname: '/Preliminares',
+          params: { obraId: String(obraseleccionado.id) },
+        });
+      } else if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/Principal');
+      }
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', `No se pudo actualizar el renglón en la obra. ${mensaje}`);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title={`AGREGANDO RENGLÓN A LA OBRA`}
+        title={renglonAsignado ? 'EDITANDO RENGLÓN DE LA OBRA' : 'AGREGANDO RENGLÓN A LA OBRA'}
         onBack={cerrar}
       />
  
@@ -393,11 +495,11 @@ export default function AgregarRenglonObraScreen() {
                   ]
                 );
                 } else {
-                  agregar();
+                  actualizarRC ? actualizar() : agregar();
                 }
               }}
               >
-                <Text style={commonStyles.buttonTextAgregar}>Agregar</Text>
+                <Text style={commonStyles.buttonTextAgregar}>{actualizarRC ? 'Actualizar' : 'Agregar'}</Text>
               </TouchableOpacity>
             </View>
           </View>

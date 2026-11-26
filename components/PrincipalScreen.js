@@ -54,7 +54,7 @@ export default function PrincipalScreen() {
   return (
     <View style={styles.container}>          
         
-        <View style={styles.contenedorPrincipal}>
+        <View style={[styles.contenedorPrincipal, { position: 'relative', width: '100%', height: 300, paddingBottom: 20 }]}>
           {/* Texto de fondo */}
          
           

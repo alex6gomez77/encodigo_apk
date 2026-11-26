@@ -771,6 +771,45 @@ export const obtenerRenglonesAsignados = (db, obraId) => {
   );
 };
 
+// Función para obtener un renglón asignado específico por su ID de asignación
+export const obtenerRenglonAsignadoPorId = (db, asignacionId) => {  
+  return db.getFirstAsync(
+    `SELECT listadodecantidades.id AS asignacion_id,
+            listadodecantidades.obra_id,
+            listadodecantidades.objetodeobra_id,
+            listadodecantidades.IDRVariante,
+            listadodecantidades.IDSubEtapa,
+            listadodecantidades.cantidad,
+            listadodecantidades.precio,
+            listadodecantidades.observaciones,
+            listadodecantidades.um,
+            listadodecantidades.IDRecurso,
+            listadodecantidades.descripcion,
+            listadodecantidades.cm,
+            listadodecantidades.orden,
+            objetosdeobras.objetodeobra,
+            rvariantes.RVariante,
+            rvariantes.UM,
+            unidadesmedidas.umedicion,
+            recursos.Recurso AS suministro_nombre,
+            sobregrupos.SobreGrupo,
+            subetapas.SubEtapa,
+            grupos.Grupo,
+            subgrupos.SubGrupo
+     FROM listadodecantidades
+     LEFT JOIN objetosdeobras ON objetosdeobras.id = listadodecantidades.objetodeobra_id
+     LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
+     LEFT JOIN unidadesmedidas ON unidadesmedidas.um = rvariantes.UM
+     LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
+     LEFT JOIN subetapas ON subetapas.IDSubEtapa = listadodecantidades.IDSubEtapa
+     LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
+     LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
+     LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
+     WHERE listadodecantidades.id = ?`,
+    asignacionId
+  );
+};
+
 export const eliminarObjetosDeLaObra = (db, obraId, objetoDeObraId) => {
   return db.runAsync(
     `DELETE FROM listadodecantidades
@@ -796,6 +835,38 @@ export const actualizarOrdenRenglon = (db, renglonId, nuevoOrden) => {
      SET orden = ?
      WHERE id = ?`,
     [nuevoOrden, renglonId]
+  );
+};
+
+// Función para actualizar un renglón asignado a una obra (edición)
+export const actualizarRenglonObra = async (
+  db,
+  renglonId,
+  obra_id,
+  objetodeobra_id,
+  IDSubEtapa,
+  cantidad,
+  precio,
+  observaciones,
+  IDRecurso = null,
+  um = null,
+  descripcion = null,
+  cm = null
+) => {
+  return db.runAsync(
+    `UPDATE listadodecantidades
+     SET obra_id = ?,
+         objetodeobra_id = ?,
+         IDSubEtapa = ?,
+         cantidad = ?,
+         precio = ?,
+         observaciones = ?,
+         IDRecurso = ?,
+         um = ?,
+         descripcion = ?,
+         cm = ?
+     WHERE id = ?`,
+    [obra_id, objetodeobra_id, IDSubEtapa, cantidad, precio, observaciones, IDRecurso, um, descripcion, cm, renglonId]
   );
 };
 
