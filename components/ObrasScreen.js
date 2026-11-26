@@ -805,6 +805,7 @@ const exportarListado = async (destino) => {
 
   async function handleSaveObra(obra) {
     //esto creo que ya no va
+    //probando
     Alert.alert('Debug', 'handleSaveObra ejecutado');
     if (!obra || !obra.id) {
       Alert.alert('Error', 'Obra no válida');
