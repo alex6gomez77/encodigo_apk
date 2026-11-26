@@ -589,13 +589,15 @@ const exportarListado = async (destino) => {
         subgrupos.IDSubGrupo, subgrupos.SubGrupo,
         grupos.IDGrupo, grupos.Grupo,
         sobregrupos.IDSobreGrupo, sobregrupos.SobreGrupo,
-        subetapas.IDSubEtapa, subetapas.SubEtapa
+        subetapas.IDSubEtapa, subetapas.SubEtapa,
+        recursos.IDRecurso, recursos.Recurso AS suministro_nombre
       FROM listadodecantidades
       LEFT JOIN rvariantes ON rvariantes.IDRVariante = listadodecantidades.IDRVariante
       LEFT JOIN subgrupos ON subgrupos.IDSubGrupo = rvariantes.IDSubGrupo
       LEFT JOIN grupos ON grupos.IDGrupo = subgrupos.IDGrupo
       LEFT JOIN sobregrupos ON sobregrupos.IDSobreGrupo = grupos.IDSobreGrupo
       LEFT JOIN subetapas ON subetapas.IDSubEtapa = listadodecantidades.IDSubEtapa
+      LEFT JOIN recursos ON recursos.IDRecurso = listadodecantidades.IDRecurso
       WHERE listadodecantidades.obra_id = ?
     `, [obra_id]);
 
@@ -647,9 +649,7 @@ const exportarListado = async (destino) => {
         // ✅ Lógica para detectar si hay suministro
         // Si en tu base de datos el campo que indica el suministro (ej. f.IDRecurso o f.suministro_nombre) está vacío o es null, entonces no hay suministro.
         const tieneSuministro = !!(f.IDRecurso || f.suministro_nombre);
-
-        tieneSuministro && console.log(`Renglón con suministro detectado: IDRVariante=${f.IDRVariante}, Suministro=${f.suministro_nombre || f.Recurso}`);
-       
+           
         // Estructura del renglón individual
         etapasMap.get(etapaKey).renglones.push({
           codigo_sc: f.IDSobreGrupo ?? '',
@@ -672,8 +672,7 @@ const exportarListado = async (destino) => {
 
           // ✅ Condicional para la fila del suministro
           
-          suministro: tieneSuministro ? {
-            
+          suministro: tieneSuministro ? {            
             codigo_sm: f.IDRecurso ?? '',
             descripcion_sm: f.suministro_nombre ?? f.Recurso ?? '',
             cantidad_sm: f.cantidad_suministro?.toString() ?? cantidad.toFixed(2), // Ajusta a tu lógica
