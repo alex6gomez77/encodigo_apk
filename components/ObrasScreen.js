@@ -648,6 +648,8 @@ const exportarListado = async (destino) => {
         // Si en tu base de datos el campo que indica el suministro (ej. f.IDRecurso o f.suministro_nombre) está vacío o es null, entonces no hay suministro.
         const tieneSuministro = !!(f.IDRecurso || f.suministro_nombre);
 
+        tieneSuministro && console.log(`Renglón con suministro detectado: IDRVariante=${f.IDRVariante}, Suministro=${f.suministro_nombre || f.Recurso}`);
+       
         // Estructura del renglón individual
         etapasMap.get(etapaKey).renglones.push({
           codigo_sc: f.IDSobreGrupo ?? '',
@@ -669,7 +671,9 @@ const exportarListado = async (destino) => {
           um_sm: '', precio_sm: '', importe_sm: '',
 
           // ✅ Condicional para la fila del suministro
+          
           suministro: tieneSuministro ? {
+            
             codigo_sm: f.IDRecurso ?? '',
             descripcion_sm: f.suministro_nombre ?? f.Recurso ?? '',
             cantidad_sm: f.cantidad_suministro?.toString() ?? cantidad.toFixed(2), // Ajusta a tu lógica
