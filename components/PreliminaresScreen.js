@@ -186,6 +186,7 @@ export default function PreliminaresScreen() {
       setRenglonesAsignados(actualizados);
       setRenglonesOrdenados(actualizados);
       setOrdenCambiado(false);
+
       
       Alert.alert('Éxito', 'Orden de renglones actualizado correctamente.');
     } catch (error) {
@@ -1048,6 +1049,7 @@ export default function PreliminaresScreen() {
         data={renglonesAsignados}
         keyExtractor={(item) => String(item.asignacion_id)}
         renderItem={({ item, index }) => (
+            
           <View>
             {(index === 0 ||
               renglonesAsignados[index - 1].objetodeobra_id !==
@@ -1128,12 +1130,13 @@ export default function PreliminaresScreen() {
             >
               <Pressable onPress={async () => {await activarObra(idObra);
                                           router.push({ pathname: '/AgregarRenglonObra', 
-                                                      params: { id: String(item.IDRVariante),
-                                                      conMateriales: String(item.cm),
+                                                      params: { id: String(item.asignacion_id),
+                                                      idrVariante: String(item.IDRVariante),
+                                                      conMateriales: String(item.cm) === "1" ? true : false,
                                                       actualizar: true,
                                                       listadodecantidadesID: item.asignacion_id } }
                                                       )}
-                                                    }
+            }
               >
                 <View style={commonStyles.detallesItemContainer}>
                   <View style={{ flex: 1, flexDirection: 'row' }}>

@@ -35,7 +35,7 @@ export default function AgregarRenglonObraScreen() {
   // Parámetros de navegación
   const renglonId = Array.isArray(params.id) ? params.id[0] : params.id; 
   const listadodecantidadesID = Array.isArray(params.listadodecantidadesID) ? params.listadodecantidadesID[0] : params.listadodecantidadesID;
-  const conMateriales = String(params.conMateriales) === 'true';
+  //const conMateriales = String(params.conMateriales) === 'true';
   
   const { licenciaEstado } = useLicencia();
   const { selectedSuministro, setSelectedSuministro } = useSuministroSelection();
@@ -54,6 +54,7 @@ export default function AgregarRenglonObraScreen() {
   const [cantidad, setCantidad] = useState('1');
   const [renglonesAsignados, setRenglonesAsignados] = useState('0');
   const [irAPreliminares, setIrAPreliminares] = useState(false);
+  const [conMateriales, setConMateriales] = useState(String(params.conMateriales) === 'true');
   const objetoModificadoRef = useRef(false);
 
     // --- SINCRONIZACIÓN CON EL CONTEXTO DE OBJETO ---
@@ -112,36 +113,48 @@ export default function AgregarRenglonObraScreen() {
         let renglonBaseLocal = null;
 
         // 1. Obtener datos de la BD en variables locales (sin setear estados aún)
+      /**/
         if (listadodecantidadesID) {
           asignadoLocal = await obtenerRenglonAsignadoAlLCPorId(db, listadodecantidadesID);
+          
           if (asignadoLocal) {
+            setConMateriales(String(asignadoLocal.cm) === "1" ? true : false); 
+           if (asignadoLocal.IDRecurso){ 
+              
+            // 
+              //SELECT
+              const suministro = await db.getFirstSync(
+                `SELECT recursos.*
+                FROM recursos
+                WHERE recursos.IDRecurso = ?
+                `, [String(asignadoLocal.IDRecurso)]
+              );  
+              console.log('asignadoLocal',asignadoLocal, suministro); 
+              await seleccionarSuministro(suministro);
+            };
+          }
+
+          // ✅ Cuando viene de Preliminares (modo edición), usar el IDRVariante del asignado
+          // para buscar el renglón base, no el asignacion_id
+          if (asignadoLocal?.IDRVariante) {
             idVarianteParaBuscar = asignadoLocal.IDRVariante;
           }
         }
-
-        /*
+         
+       
         if (idVarianteParaBuscar) {
           renglonBaseLocal = await obtenerRenglonPorId(db, String(idVarianteParaBuscar));
         }
-          */
-
-              // ✅ AQUÍ ESTÁ LA MAGIA: Reconstruimos el cero a la izquierda si es necesario
-        if (idVarianteParaBuscar) {
+        
+        // Si no encontró con el ID directo, intentar con cero a la izquierda
+        if (!renglonBaseLocal && idVarianteParaBuscar) {
           let idString = String(idVarianteParaBuscar).trim();
-          
-          // Si el ID tiene 5 dígitos (ej. 72414), le ponemos el cero delante para que sean 6
-          // Ajusta el '6' al largo total que deben tener tus códigos (ej. si son 7, pon un 7)
+          // Intentar agregar cero a la izquierda si tiene 5 dígitos y no empieza con 0
           if (idString.length === 5 && !idString.startsWith('0')) {
-             idString = '0' + idString;
-          }
-
-          try {
-             renglonBaseLocal = await obtenerRenglonPorId(db, idString);
-          } catch (e) {
-             renglonBaseLocal = null;
+            idString = '0' + idString;
+            renglonBaseLocal = await obtenerRenglonPorId(db, idString);
           }
         }
-
         
 
         if (!renglonBaseLocal) {
@@ -220,14 +233,49 @@ export default function AgregarRenglonObraScreen() {
       } finally {
         if (activo) setCargando(false);
       }
-    };
-
+    };  
     cargarDatos();
 
     return () => {
       activo = false;
     };
   }, [db, renglonId, listadodecantidadesID]);
+
+  const seleccionarSuministro = async suministro => {
+    console.log('suministro: ',suministro);
+      suministro['MO'] = 0;
+      suministro['EQ'] = 0;
+      suministro['MA'] = 0;
+
+      if (suministro.Tipo == 'S' || suministro.Tipo == 'J'){
+        const recursos = await db.getAllAsync(
+          `SELECT rc.Tipo, 
+              SUM(rc.Precio * c.Norma) AS Subtotal
+          FROM crecursos c
+          LEFT JOIN recursos rn ON rn.IDRecurso = c.IDRecursoNorma
+          LEFT JOIN recursos rc ON rc.IDRecurso = c.IDRecurso
+          WHERE c.IDRecursoNorma = ?
+          GROUP BY rc.Tipo
+          `, [suministro.IDRecurso]
+        );  
+
+       recursos.map( rec => {  
+          if(rec.Tipo == "2"){         
+            suministro['MO'] = rec.Subtotal ;
+          } else if(rec.Tipo == "3"){         
+            suministro['EQ'] = rec.Subtotal;
+          } else if(rec.Tipo == "1"){          
+            suministro['MA'] = rec.Subtotal;
+          }               
+        });        
+      } else if(suministro.Tipo == '1'){ //Materiales       
+        suministro['MA'] = suministro.Precio;       
+      } else { 
+        suministro = null;       
+      }
+
+    setSelectedSuministro(suministro); 
+  };
 
   // --- ACCIONES ---
   const isPremiumDisabled = () => {
